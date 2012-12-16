@@ -6,19 +6,22 @@
 //  Copyright (c) 2011 Coffee and Power Inc. All rights reserved.
 //
 
-#import "MapDataSet.h"
-#import "MKAnnotationView+WebCache.h"
+#import "MKAnnotationView+SpecialPin.h"
 #import "VenueInfoViewController.h"
-#import "User.h"
+#import "CPUser.h"
+#import "CPObjectManager.h"
+#import "CPMarkerManager.h"
 
-@interface MapTabController() 
+@interface MapTabController()
 -(void)zoomTo:(CLLocationCoordinate2D)loc;
 
 @property (strong, nonatomic) NSTimer *reloadTimer;
 @property (strong, nonatomic) NSTimer *locationAllowTimer;
 @property (strong, nonatomic) NSTimer *arrowSpinTimer;
+@property (strong, nonatomic) NSDate *dataLoadDate;
 @property (weak, nonatomic) IBOutlet UIButton *refreshButton;
 @property (nonatomic) BOOL locationStatusKnown;
+@property (nonatomic) MKMapRect dataCoveredMapRect;
 
 -(void)refreshLocationsIfNeeded;
 -(void)startRefreshArrowAnimation;
@@ -28,13 +31,6 @@
 
 @implementation MapTabController
 
-BOOL clearLocations = NO;
-
-- (void)applicationDidBecomeActive:(NSNotification *)notification {
-    // Reload all pins when the app comes back into the foreground
-    [self refreshButtonClicked:nil];
-}
-
 #pragma mark - View lifecycle
 
 // Implement viewDidLoad to do additional setup after loading the view, typically from a nib.
@@ -43,25 +39,17 @@ BOOL clearLocations = NO;
     [super viewDidLoad];
     self.mapView.tag = mapTag;
     
-    self.tabBarController.selectedIndex = 1;
-
     // Register to receive userCheckedIn notification to intitiate map refresh immediately after user checks in
-    [[NSNotificationCenter defaultCenter] addObserver:self 
-                                             selector:@selector(userCheckedIn:) 
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshLocationsIfNeeded)
                                                  name:@"userCheckInStateChange"
                                                object:nil];
-
-    // Add a notification catcher for applicationDidBecomeActive to refresh map pins
-    [[NSNotificationCenter defaultCenter] addObserver:self 
-                                             selector:@selector(applicationDidBecomeActive:) 
-                                                 name:@"applicationDidBecomeActive" 
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(stopReloadTimer) name:@"applicationDidEnterBackground"
                                                object:nil];
     
-    // Title view styling
-    self.navigationItem.title = @"C&P"; // TODO: Remove once back button with mug logo is added to pushed views
-    
     self.mapHasLoaded = NO;
-    
 	self.hasUpdatedUserLocation = false;
     
 	// let's assume when this view loads we don't know the location status
@@ -71,17 +59,17 @@ BOOL clearLocations = NO;
     // fire a timer every two seconds to make sure the user has explicity denied or allowed location
     // this allows us to not start loading the data until the user has dismiss the alert the OS puts up
     
-    self.locationAllowTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 
-                                                               target:self 
-                                                             selector:@selector(checkIfUserHasDismissedLocationAlert) 
-                                                             userInfo:nil 
+    self.locationAllowTimer = [NSTimer scheduledTimerWithTimeInterval:2.0
+                                                               target:self
+                                                             selector:@selector(checkIfUserHasDismissedLocationAlert)
+                                                             userInfo:nil
                                                               repeats:YES];
     // check this already since we don't want a lag time if this step has already been completed
     [self checkIfUserHasDismissedLocationAlert];
     
     // center on the last known user location
 	[self zoomTo:[CPAppDelegate locationManager].location.coordinate];
-
+    
 	NSOperationQueue *queue = [NSOperationQueue mainQueue];
 	//NSOperationQueue *queue = [[NSOperationQueue alloc] init];
 	//BOOL wasSuspended = queue.isSuspended;
@@ -90,25 +78,15 @@ BOOL clearLocations = NO;
     // Drop shadow under navigation bar
     UIImageView *shadowView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"header-shadow.png"]];
     shadowView.frame = CGRectMake(0,
-                                  0, 
-                                  self.view.frame.size.width, 
+                                  0,
+                                  self.view.frame.size.width,
                                   shadowView.frame.size.height);
     [self.view addSubview:shadowView];
 }
 
-- (void)viewDidUnload
-{
-    [super viewDidUnload];
-	[self.reloadTimer invalidate];
-	self.reloadTimer = nil;
-
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"userCheckInStateChange" object:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"applicationDidBecomeActive" object:nil];
-}
-
 - (void)viewWillAppear:(BOOL)animated {
     [self.navigationController setNavigationBarHidden:NO animated:animated];
-
+    
     // place the settings button on the navigation item if required
     // or remove it if the user isn't logged in
     [CPUIHelper settingsButtonForNavigationItem:self.navigationItem];
@@ -118,7 +96,7 @@ BOOL clearLocations = NO;
 {
 	[super viewDidAppear:animated];
 	self.mapHasLoaded = YES;
-
+    
     // Update for login name in header field
     [[CPAppDelegate settingsMenuController].tableView reloadData];
     
@@ -128,141 +106,130 @@ BOOL clearLocations = NO;
     }
 }
 
-# pragma mark - Active Venue and Active User Grabbing
-
-// TODO: For both users and venues let's have a caching strategy
-// probably store them after they are loaded in core data
-// and grab them from there and update them when new calls are made
-// instead of reloaded them everytime the map is reloaded and losing the ones no longer on the map
-
-- (User *)userFromActiveUsers:(int)userID
-{
-    return [self.dataset.activeUsers objectForKey:[NSString stringWithFormat:@"%d", userID]];
-}
-
-- (CPVenue *)venueFromActiveVenues:(int)venueID
-{
-    return [self.dataset.activeVenues objectForKey:[NSString stringWithFormat:@"%d", venueID]];
-}
-
-- (void)userCheckedIn:(NSNotification *)notification
-{
-    NSLog(@"*** user checked in");
+- (void)restartActiveAppTasks {
     
-    [self refreshButtonClicked:notification];
+    // Reload all pins when the app comes back into the foreground
+    [self refreshLocations:nil];
+    
+    // restart the reload timer that was stopped when we backgrounded
+    [self startReloadTimer];
 }
 
 - (IBAction)refreshButtonClicked:(id)sender
 {
-    clearLocations = NO;
-    [self refreshLocations];
+    [self refreshLocations:nil];
+}
+
+- (CLLocationCoordinate2D)northeastCoordinateForMapView
+{
+    return [self.mapView convertPoint:CGPointMake(self.mapView.bounds.origin.x + self.mapView.bounds.size.width,
+                                                  self.mapView.bounds.origin.y) toCoordinateFromView:self.mapView];
+}
+
+- (CLLocationCoordinate2D)southwestCoordinateForMapView
+{
+    return [self.mapView convertPoint:CGPointMake(self.mapView.bounds.origin.x,
+                                                  self.mapView.bounds.origin.y + self.mapView.bounds.size.height) toCoordinateFromView:self.mapView];
+}
+
+-(BOOL)isCurrentMarkerDataStillValid
+{
+	const double kTwoMinutesAgo = -2 * 60;
+	
+	// if the data is old, we need to reload anyway
+	double age = [self.dataLoadDate timeIntervalSinceNow];
+	
+    if(self.dataLoadDate && age < kTwoMinutesAgo) {
+		NSLog(@"Forcing refresh of map data ... it's too old (%.2f seconds old)", age);
+		return false;
+	}
+    
+	// if the new map region is contained within the region defined by the venues that are the furthest away
+    // then we don't need to reload
+	if(MKMapRectContainsRect(self.dataCoveredMapRect, self.mapView.visibleMapRect)) {
+		return true;
+    } else {
+		return false;
+	}
 }
 
 -(void)refreshLocationsIfNeeded
 {
-    
-    if (self.locationStatusKnown) {
-        
-        MKMapRect mapRect = self.mapView.visibleMapRect;
-        
-        // prevent the refresh of locations when we have a valid dataset or the map is not yet loaded
-        if(self.mapHasLoaded && (!self.dataset || ![self.dataset isValidFor:mapRect mapCenter:self.mapView.centerCoordinate]))
-        {
-            [self refreshLocations];
-        }
+    // prevent the refresh of locations when we have a valid dataset or the map is not yet loaded
+    if(self.locationStatusKnown && self.mapHasLoaded && (![CPMarkerManager sharedManager].venues || ![self isCurrentMarkerDataStillValid])) {
+        [self refreshLocations:nil];
     }
 }
 
--(void)refreshLocations
+-(void)refreshLocations:(void (^)(void))completion
 {
+    // cancel any current requests for new map data or active users for venues
+    RKRoute *markerRoute = [[CPObjectManager sharedManager].router.routeSet routeForName:kRouteMarkers];
+    RKRoute *venueCheckedInRoute = [[CPObjectManager sharedManager].router.routeSet routeForName:kRouteVenueCheckedInUsers];
+    [[CPObjectManager sharedManager] cancelAllObjectRequestOperationsWithMethod:RKRequestMethodGET matchingPathPattern:markerRoute.pathPattern];
+    [[CPObjectManager sharedManager] cancelAllObjectRequestOperationsWithMethod:RKRequestMethodGET matchingPathPattern:venueCheckedInRoute.pathPattern];
+    
     [self startRefreshArrowAnimation];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"mapIsLoadingNewData" object:nil];
     
-    // only use the center coordinate of the map if it exists
-    // otherwise use the AppDelegate's locationManager
-    CLLocationCoordinate2D dataSetCoordinate = self.mapHasLoaded ?
-                                               self.mapView.centerCoordinate : [CPAppDelegate locationManager].location.coordinate;
-    
-    [MapDataSet beginLoadingNewDataset:dataSetCoordinate
-                            completion:^(MapDataSet *newDataset, NSError *error) {
-
-        if (clearLocations) {
-            
-            // clear other than current user location
-            for (id annotation in self.mapView.annotations) {
-                if ([annotation isKindOfClass:[CPVenue class]]) {
-                    [self.mapView removeAnnotation:annotation];
-                }
-            }                             
-        }
-
-        NSMutableArray *annotationsToAdd = [[NSMutableArray alloc] initWithArray:newDataset.annotations];
+    MKMapRect mapRectForRequest = self.mapView.visibleMapRect;
         
-        if(newDataset)
-        {
-            _dataset = newDataset;
-            
-            BOOL foundIt = NO;
-
-            for (CPVenue *ann in [self.mapView.annotations filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"!(self isKindOfClass: %@)", [MKUserLocation class]]]) {
-                foundIt = NO;                                            
-                for (CPVenue *newAnn in newDataset.annotations) {
-                    if ([ann.foursquareID isEqual:newAnn.foursquareID]) {
-                        foundIt = YES;
-                        if (ann.checkinCount != newAnn.checkinCount || ann.weeklyCheckinCount != newAnn.weeklyCheckinCount) {
-                            // the annotation will be added again
-                            [self.mapView removeAnnotation:ann];
-                        } else {
-                            // no update to the annotation is required
-                            [annotationsToAdd removeObject:newAnn];
-                        }
-                        break;
-                    }
-                }
-                
-                if (! foundIt) {
-                    // this is causing problems, commenting out for now
-                    // [mapView removeAnnotation:ann];
-                }
-                
-            }
-        }
-        
-        // add modified dataset to map - new/updated annotations
-        [self.mapView addAnnotations:annotationsToAdd];
-
-        // stop spinning the refresh icon and dismiss the HUD
-        [self stopRefreshArrowAnimation];
-        
-        // only try to dismiss the SVProgressHUD if this view is on screen
-        // so that the places and venue tabs can dismiss their own ProgressHUDs
-        
-        if (self.isViewLoaded && self.view.window) {
-           [SVProgressHUD dismiss];
-        }
-        
-        // post two notifications for places and people reload
-        // both send non-mutable copies of the data
-        // it's up to that view controller to make a mutable copy that it can modify so that it doesn't directly touch the dataset
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"refreshUsersFromNewMapData" object:self.dataset.activeUsers];
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"refreshVenuesFromNewMapData" object:[NSArray arrayWithArray:self.dataset.annotations]];
-    }]; 
+    [[CPMarkerManager sharedManager] getMarkersWithinRegionDefinedByNortheastCoordinate:[self northeastCoordinateForMapView]
+                                                                    southwestCoordinate:[self southwestCoordinateForMapView]
+                                                                             completion:^(NSError *error)
+     {
+         self.dataLoadDate = [NSDate date];
+         self.dataCoveredMapRect = mapRectForRequest;
+         
+         if (completion) {
+             completion();
+         }
+         
+         NSMutableArray *filteredVenues = [[[CPMarkerManager sharedManager].venues filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"isNeighborhood == NO"]] mutableCopy];
+         
+         for (CPVenue *newVenue in [filteredVenues mutableCopy]) {
+             if ([self.mapView.annotations containsObject:newVenue]) {
+                 
+                 CPVenue *mapVenue = [self.mapView.annotations objectAtIndex:[self.mapView.annotations indexOfObject:newVenue]];
+                 
+                 if (![newVenue.checkedInNow isEqualToNumber:mapVenue.checkedInNow] || ![newVenue.weeklyCheckinCount isEqualToNumber:mapVenue.weeklyCheckinCount]) {
+                     // the annotation will be added again
+                     [self.mapView removeAnnotation:mapVenue];
+                 } else {
+                     // no update to the annotation is required
+                     [filteredVenues removeObject:newVenue];
+                 }
+             }
+         }
+         
+         // add modified dataset to map - new/updated annotations
+         [self.mapView addAnnotations:filteredVenues];
+         
+         // stop spinning the refresh icon and dismiss the HUD
+         [self stopRefreshArrowAnimation];
+         
+         // only try to dismiss the SVProgressHUD if this view is on screen
+         // so that the places and venue tabs can dismiss their own ProgressHUDs
+         
+         if (self.isViewLoaded && self.view.window) {
+             [SVProgressHUD dismiss];
+         }
+     }];
 }
-
 
 - (IBAction)locateMe:(id)sender
 {
-    if (![CLLocationManager locationServicesEnabled] || 
+    if (![CLLocationManager locationServicesEnabled] ||
         [CLLocationManager authorizationStatus] == kCLAuthorizationStatusDenied ||
         [CLLocationManager authorizationStatus] == kCLAuthorizationStatusRestricted) {
         
-        NSString *message = @"We're unable to get your location and the application relies on it.\n\nPlease go to your settings and enable location for the C&P app.";
+        NSString *message = @"We're unable to get your location and the application relies on it.\n\nPlease go to your settings and enable location for the Workclub app.";
         [SVProgressHUD showErrorWithStatus:message
-                             duration:kDefaultDismissDelay];
+                                  duration:kDefaultDismissDelay];
     } else {
         // we have a location ... zoom to it
         [self zoomTo: [[self.mapView userLocation] coordinate]];
-    }    
+    }
 }
 
 - (MKUserLocation *)currentUserLocationInMapView
@@ -273,36 +240,26 @@ BOOL clearLocations = NO;
 - (void) mapView:(MKMapView *)mapView didAddAnnotationViews:(NSArray *)views {
     for (MKAnnotationView *view in views) {
         CGFloat startingAlpha = view.alpha;
-
+        
         // Fade in any new annotations
-        view.alpha = 0;        
+        view.alpha = 0;
         [UIView beginAnimations:nil context:NULL];
         [UIView setAnimationDuration:1.5];
         [UIView setAnimationCurve:UIViewAnimationCurveEaseInOut];
         view.alpha = startingAlpha;
         [UIView commitAnimations];
         
-        if ([view.annotation isKindOfClass:[CPVenue class]]) {
-            // Bring any checked in pins to the front of all subviews
-            CPVenue *place = (CPVenue *)view.annotation;
-            
-            if (place.checkinCount > 0) {
-                [[view superview] bringSubviewToFront:view];
-            }
-            else {
-                [[view superview] sendSubviewToBack:view];                
-            }
-        } else {
+        if (![view.annotation isKindOfClass:[CPVenue class]]) {
             [[view superview] sendSubviewToBack:view];
         }
-    }    
+    }
 }
 
 // mapView:viewForAnnotation: provides the view for each annotation.
 // This method may be called for all or some of the added annotations.
 // For MapKit provided annotations (eg. MKUserLocation) return nil to use the MapKit provided annotation view.
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id <MKAnnotation>)annotation
-{   
+{
 	MKAnnotationView *pinToReturn = nil;
     
     if ([annotation isKindOfClass:[CPVenue class]]) {
@@ -310,11 +267,12 @@ BOOL clearLocations = NO;
         
         // Need to set a unique identifier to prevent any weird formatting issues -- use a combination of annotationsInCluster.count + hasCheckedInUsers value + smallPin value
         // @TODO: comment above is now invalid, identifier below is not going to be unique. why not use the foursquare id, or venue id? -- lithium
-        NSString *reuseId = [NSString stringWithFormat:@"place-%d-%d", (placeAnn.checkinCount > 0) ? placeAnn.checkinCount : placeAnn.weeklyCheckinCount, (placeAnn.checkinCount > 0)];
+        NSString *reuseId = [NSString stringWithFormat:@"place-%@-%d", ([placeAnn.checkedInNow intValue] > 0) ? placeAnn.checkedInNow : placeAnn.weeklyCheckinCount,
+                             ([placeAnn.checkedInNow intValue] > 0)];
         
         MKAnnotationView *pin = (MKAnnotationView *) [self.mapView dequeueReusableAnnotationViewWithIdentifier: reuseId];
         
-        if (pin == nil)
+        if (!pin)
         {
             pin = [[MKAnnotationView alloc] initWithAnnotation: annotation reuseIdentifier: reuseId];
         }
@@ -325,22 +283,13 @@ BOOL clearLocations = NO;
         
         BOOL solar = [placeAnn.specialVenueType isEqual:@"solar"];
         
-        if (!placeAnn.checkinCount > 0) {
-            [pin setPin:placeAnn.weeklyCheckinCount hasCheckins:NO hasVirtual:NO isSolar:solar withLabel:NO];
+        if ([placeAnn.checkedInNow intValue] == 0) {
+            [pin setPin:placeAnn.weeklyCheckinCount hasCheckins:NO hasContacts:NO isSolar:solar withLabel:NO];
             [self adjustScaleForPin:pin forNumberOfPeople:placeAnn.weeklyCheckinCount];
-        } 
+        }
         else {
-            if(placeAnn.hasContactAtVenue)
-            {
-                [pin setPin:placeAnn.checkinCount hasCheckins:YES hasVirtual:YES isSolar:solar withLabel:YES];
-                pin.centerOffset = CGPointMake(0, -31);
-            }
-            else
-            {
-                [pin setPin:placeAnn.checkinCount hasCheckins:YES hasVirtual:NO isSolar:solar withLabel:YES];
-                pin.centerOffset = CGPointMake(0, -31);
-
-            }
+            [pin setPin:placeAnn.checkedInNow hasCheckins:YES hasContacts:[placeAnn.hasCheckedInContacts boolValue] isSolar:solar withLabel:YES];
+            pin.centerOffset = CGPointMake(0, -31);
         }
         
         pin.enabled = YES;
@@ -354,7 +303,7 @@ BOOL clearLocations = NO;
         
         // Set up correct callout offset for custom pin images
         pinToReturn.calloutOffset = CGPointMake(0,0);
-    
+        
     }
     return pinToReturn;
 }
@@ -362,14 +311,14 @@ BOOL clearLocations = NO;
 - (float)getPinScaleForNumberOfPeople:(NSInteger)number {
     if (!self.pinScales) {
         self.pinScales = [NSArray arrayWithObjects:
-                     [NSNumber numberWithFloat:0.31f],   // for 1 person
-                     [NSNumber numberWithFloat:0.57f],
-                     [NSNumber numberWithFloat:0.74f],
-                     [NSNumber numberWithFloat:0.855f],
-                     [NSNumber numberWithFloat:0.932f],
-                     [NSNumber numberWithFloat:0.976f],
-                     [NSNumber numberWithFloat:1.0f],   // for 7 or more people
-                     nil];
+                          [NSNumber numberWithFloat:0.31f],   // for 1 person
+                          [NSNumber numberWithFloat:0.57f],
+                          [NSNumber numberWithFloat:0.74f],
+                          [NSNumber numberWithFloat:0.855f],
+                          [NSNumber numberWithFloat:0.932f],
+                          [NSNumber numberWithFloat:0.976f],
+                          [NSNumber numberWithFloat:1.0f],   // for 7 or more people
+                          nil];
     }
     
     if (number <= 0) {
@@ -382,9 +331,9 @@ BOOL clearLocations = NO;
     
 }
 
-- (void)adjustScaleForPin:(MKAnnotationView *)pin forNumberOfPeople:(NSInteger)number {
-    if (pin.image != nil) {    
-        float scale = [self getPinScaleForNumberOfPeople:number];
+- (void)adjustScaleForPin:(MKAnnotationView *)pin forNumberOfPeople:(NSNumber *)number {
+    if (pin.image) {
+        float scale = [self getPinScaleForNumberOfPeople:[number intValue]];
         
         // can't simply adjust the pin's transform since that will also scale the callout bubble
         // TODO: if we want to keep the pin touch area the same, we should only scale the image instead
@@ -396,7 +345,7 @@ BOOL clearLocations = NO;
 
 
 - (void)mapView:(MKMapView *)mapView annotationView:(MKAnnotationView *)view calloutAccessoryControlTapped:(UIControl *)control {
-
+    
     if ([view.annotation isKindOfClass:[CPVenue class]]) {
         CPVenue *tappedPlace = (CPVenue *)view.annotation;
         
@@ -413,10 +362,21 @@ BOOL clearLocations = NO;
     }
 }
 
-////// map delegate
-
 - (void)mapView:(MKMapView *)thisMapView regionDidChangeAnimated:(BOOL)animated
-{   
+{
+    // bring any checked-in venues to the front of all subviews.
+    for (CPVenue *ann in [self.mapView.annotations filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(self isKindOfClass: %@)", [CPVenue class]]]) {
+        MKAnnotationView *annView = [thisMapView viewForAnnotation:ann];
+        if (annView) {
+            if ([ann.checkedInNow intValue]> 0) {
+                [[annView superview] bringSubviewToFront:annView];
+            }
+            else {
+                [[annView superview] sendSubviewToBack:annView];
+            }
+        }
+    }
+    
     [self refreshLocationsIfNeeded];
 }
 
@@ -435,22 +395,22 @@ BOOL clearLocations = NO;
 	
 	if(userLocation.location.coordinate.latitude != 0 &&
        userLocation.location.coordinate.longitude != 0)
-	{		
+	{
         if (!self.hasUpdatedUserLocation) {
             NSLog(@"MapTab: didUpdateUserLocation a zoomto (lat %f, lon %f)",
                   userLocation.location.coordinate.latitude,
                   userLocation.location.coordinate.longitude);
-            [self zoomTo:userLocation.location.coordinate];   
+            [self zoomTo:userLocation.location.coordinate];
             self.hasUpdatedUserLocation = true;
         }
-
+        
 	}
 }
 
 // zoom to the location; on initial load & after updaing their pos
 -(void)zoomTo:(CLLocationCoordinate2D)loc
 {
-
+    
     if(CLLocationCoordinate2DIsValid(loc))
     {
         // zoom to a region 2km across
@@ -482,13 +442,12 @@ BOOL clearLocations = NO;
         
         // every 10 seconds, see if it's time to refresh the data
         // (the data invalidates every 2 minutes, but we check more often)
+        [self startReloadTimer];
         
-        self.reloadTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
-                                                       target:self
-                                                     selector:@selector(refreshLocationsIfNeeded)
-                                                     userInfo:nil
-                                                      repeats:YES];
-        
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(restartActiveAppTasks)
+                                                     name:@"applicationWillEnterForeground"
+                                                   object:nil];
         
         // invalidate this timer so its done
         [self.locationAllowTimer invalidate];
@@ -496,12 +455,27 @@ BOOL clearLocations = NO;
     }
 }
 
+- (void)startReloadTimer
+{
+    self.reloadTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
+                                                        target:self
+                                                      selector:@selector(refreshLocationsIfNeeded)
+                                                      userInfo:nil
+                                                       repeats:YES];
+}
+
+- (void)stopReloadTimer
+{
+    [self.reloadTimer invalidate];
+    self.reloadTimer = nil;
+}
+
 - (void)spinRefreshArrow
 {
-    [CPUIHelper spinView:self.refreshButton.imageView 
-                duration:1.0f 
-             repeatCount:0 
-               clockwise:NO  
+    [CPUIHelper spinView:self.refreshButton.imageView
+                duration:1.0f
+             repeatCount:0
+               clockwise:NO
           timingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]];
 }
 

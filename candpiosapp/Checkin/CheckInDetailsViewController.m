@@ -12,6 +12,7 @@
 #import "UIViewController+isModal.h"
 #import "CPCheckinHandler.h"
 #import "CPApiClient.h"
+#import "NSDictionary+JsonParserWorkaround.h"
 
 @interface CheckInDetailsViewController() <UITextFieldDelegate, UIScrollViewDelegate>
 
@@ -37,6 +38,7 @@
 @property (weak, nonatomic) IBOutlet UILabel *threeHoursLabel;
 @property (weak, nonatomic) IBOutlet UILabel *fiveHoursLabel;
 @property (weak, nonatomic) IBOutlet UILabel *sevenHoursLabel;
+@property (weak, nonatomic) IBOutlet UIImageView *mapPinImageView;
 @property (weak, nonatomic) UIImageView *infoBubbleArrow;
 @property (nonatomic) int checkInDuration;
 @property (nonatomic) BOOL sliderButtonPressed;
@@ -56,6 +58,7 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+    
     // set the title of the nav controller to the place name
     self.title = self.venue.name;
     
@@ -95,18 +98,7 @@
     bubbleSub.layer.mask = maskLayer;
     
     // add bubbleSubview to the userInfoBubble
-    [self.userInfoBubble insertSubview:bubbleSub atIndex:0];    
-    
-    
-    // make an MKCoordinate region for the zoom level on the map
-    MKCoordinateRegion region = MKCoordinateRegionMake(self.venue.coordinate, MKCoordinateSpanMake(0.006, 0.006));
-    [self.mapView setRegion:region];
-    
-    // this will always be the point on iPhones up to iPhone4
-    // if this needs to be used on iPad we'll need to do this programatically or use an if-else
-    CGPoint moveRight = CGPointMake(71, 136);
-    CLLocationCoordinate2D coordinate = [self.mapView convertPoint:moveRight toCoordinateFromView:self.mapView];
-    [self.mapView setCenterCoordinate:coordinate animated:NO];
+    [self.userInfoBubble insertSubview:bubbleSub atIndex:0];
     
     // set LeagueGothic font where applicable
     for (UILabel *labelNeedsGothic in [NSArray arrayWithObjects:self.checkInLabel, self.durationHeader, nil]) {
@@ -134,7 +126,29 @@
     
     // set the labels for the venue name and address
     self.placeName.text = self.venue.name;
-    self.placeAddress.text = self.venue.address;
+    self.placeAddress.text = ![self.venue.isNeighborhood boolValue] ? self.venue.address : @"You won't appear on the map.";
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+    
+    if (self.navigationController && self.navigationController.navigationBarHidden) {
+        // make sure our navigationController isn't hidden from a search on the CheckInListViewController
+        [self.navigationController setNavigationBarHidden:NO animated:YES];
+    }
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    
+    // make an MKCoordinate region for the zoom level on the map
+    MKCoordinateRegion region = MKCoordinateRegionMake(self.venue.coordinate, MKCoordinateSpanMake(0.006, 0.006));
+    [self.mapView setRegion:region];
+    
+    CGPoint mapPinCenter = [self.mapView convertPoint:self.mapPinImageView.center fromView:self.blueOverlay];
+    [CPUIHelper shiftMapView:self.mapView forPinCenterInMapview:mapPinCenter];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField
@@ -142,6 +156,7 @@
     [textField resignFirstResponder];
     return YES;
 }
+
 
 // customer getter for infoBubbleArrow
 // lazily instantiates it if it's not on the screen yet
@@ -174,46 +189,34 @@
     NSInteger checkOutTime = checkInTime + checkInDuration * 3600;
     
     [CPApiClient checkInToVenue:self.venue
-                         hoursHere:self.checkInDuration
-                        statusText:statusText
-                         isVirtual:self.checkInIsVirtual
-                       isAutomatic:NO
+                      hoursHere:self.checkInDuration
+                     statusText:statusText
+                    isAutomatic:NO
                    completionBlock:^(NSDictionary *json, NSError *error){
         // hide the SVProgressHUD
-        if (!error) {
-            if (![[json objectForKey:@"error"] boolValue]) {
+        if (!error && ![[json objectForKey:@"error"] boolValue]) {
+            [SVProgressHUD dismiss];
+            
+            // a successful checkin passes back venue_id
+            // give that to this venue before we store it in NSUserDefaults
+            // in case we came from foursquare venue list and didn't have it
+            self.venue.venueID = @([[json objectForKey:@"venue_id"] intValue]);
+            
+            [CPCheckinHandler queueLocalNotificationForVenue:self.venue checkoutTime:checkOutTime];
+            [CPCheckinHandler handleSuccessfulCheckinToVenue:self.venue checkoutTime:checkOutTime];
+            
+            // hide the checkin screen, we're checked in
+            if ([self isModal]) {
+                [self dismissModalViewControllerAnimated:YES];
+            } else {
+                // show an SVProgressHUD since we'll be reloading user data in the venue view
+                [SVProgressHUD showWithStatus:@"Loading..."];
+                [self.navigationController popViewControllerAnimated:YES];
+                
+                // our delegate is the venue info view controller
+                // tell it to scroll to the user thumbnail after loading new data from this checkin
+                [self.delegate setScrollToUserThumbnail:YES];
                 [SVProgressHUD dismiss];
-                
-                // a successful checkin passes back venue_id
-                // give that to this venue before we store it in NSUserDefaults
-                // in case we came from foursquare venue list and didn't have it
-                self.venue.venueID = [[json objectForKey:@"venue_id"] intValue];
-                
-                [[CPCheckinHandler sharedHandler] queueLocalNotificationForVenue:self.venue checkoutTime:checkOutTime];
-                [[CPCheckinHandler sharedHandler] handleSuccessfulCheckinToVenue:self.venue checkoutTime:checkOutTime];
-                
-                // hide the checkin screen, we're checked in
-                if ([self isModal]) {
-                    [self dismissModalViewControllerAnimated:YES];
-                } else {
-                    // show an SVProgressHUD since we'll be reloading user data in the venue view
-                    [SVProgressHUD showWithStatus:@"Loading..."];
-                    [self.navigationController popViewControllerAnimated:YES];
-                    
-                    // our delegate is the venue info view controller
-                    // tell it to scroll to the user thumbnail after loading new data from this checkin
-                    [self.delegate setScrollToUserThumbnail:YES];
-                    [SVProgressHUD dismiss];
-                }
-            }
-            else {
-                
-                // there's an error either becuase the user wasn't checked in or we didn't pass a foursquare ID
-                // we obviously passed a foursquare ID if we're in the app so the user isn't actually logged in
-                // show an alertView if the user isn't checked in
-                [SVProgressHUD dismissWithError:@"You must be logged in to C&P in order to check in."
-                                     afterDelay:kDefaultDismissDelay];
-                [CPAppDelegate performSelector:@selector(showSignupModalFromViewController:animated:) withObject:self afterDelay:kDefaultDismissDelay];
             }
         } else {
             // show an alertView letting the user know that an error occured, log the error if debugging
@@ -261,10 +264,10 @@
             // reverse the response so we get latest checkins first
             for (NSDictionary *user in [responseArray reverseObjectEnumerator]) {
                 
-                User *checkedInUser = [[User alloc] init];
+                CPUser *checkedInUser = [[CPUser alloc] init];
                 checkedInUser.nickname = [user objectForKey:@"nickname"];
-                checkedInUser.status = [user objectForKey:@"status_text"];
-                checkedInUser.checkInIsVirtual = [[user objectForKey:@"is_virtual"] boolValue];
+                checkedInUser.lastCheckIn = [[CPCheckIn alloc] init];
+                checkedInUser.lastCheckIn.statusText = [user objectForKey:@"status_text"];
                 
                 // add this user to the user array
                 // this is how we put the user's info in the info bubble later
@@ -294,11 +297,6 @@
                 
                 // add the imageview to the button
                 [userImageButton addSubview:userImage];
-                
-                //If user is virtually checkedIn then add virtual badge to their profile image
-                [CPUIHelper manageVirtualBadgeForProfileImageView:userImage 
-                                                 checkInIsVirtual:checkedInUser.checkInIsVirtual];        
-
                 
                 // add the button to the scrollview
                 [self.otherUsersScrollView addSubview:userImageButton];
@@ -457,7 +455,7 @@
     // set the nickname and status on the info bubble
     // decode the HTML entities
     self.infoBubbleNickname.text = [[self.userArray objectAtIndex:userIndex] nickname];
-    NSString *status = [[self.userArray objectAtIndex:userIndex] status];
+    NSString *status = [[[self.userArray objectAtIndex:userIndex] lastCheckIn] statusText];
     if ([status length] > 0) {
         self.infoBubbleStatus.text = [NSString stringWithFormat:@"\"%@\"", status];
     } else {

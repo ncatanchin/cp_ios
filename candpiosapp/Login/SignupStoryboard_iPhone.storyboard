@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="2.0" toolsVersion="2549" systemVersion="12A269" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" initialViewController="crz-ik-TbX">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="2.0" toolsVersion="2844" systemVersion="12C60" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" initialViewController="crz-ik-TbX">
     <dependencies>
-        <deployment defaultVersion="1296" identifier="iOS"/>
+        <deployment defaultVersion="1536" identifier="iOS"/>
         <development version="4300" identifier="xcode"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="1498"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="1930"/>
     </dependencies>
     <scenes>
         <!--Navigation Controller - Log In-->
         <scene sceneID="FCd-A8-ej4">
             <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="LT5-ih-eU0" userLabel="First Responder" sceneMemberID="firstResponder"/>
                 <navigationController storyboardIdentifier="SignupNavigationController" title="Log In" definesPresentationContext="YES" navigationBarHidden="YES" id="crz-ik-TbX" sceneMemberID="viewController">
                     <tabBarItem key="tabBarItem" title="Log In" image="tab-login.png" id="qLD-41-OQc"/>
                     <nil key="simulatedBottomBarMetrics"/>
@@ -24,79 +23,13 @@
                         <segue destination="shZ-UI-Hx3" kind="relationship" relationship="rootViewController" id="1BI-wm-gVg"/>
                     </connections>
                 </navigationController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="LT5-ih-eU0" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="-88" y="111"/>
-        </scene>
-        <!--Enter Email After Sign Up Controller-->
-        <scene sceneID="81E-Lk-B61">
-            <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="EF1-cq-5m5" userLabel="First Responder" sceneMemberID="firstResponder"/>
-                <viewController id="QMd-8J-H38" customClass="EnterEmailAfterSignUpController" sceneMemberID="viewController">
-                    <view key="view" contentMode="scaleToFill" id="em4-Cv-WlR">
-                        <rect key="frame" x="0.0" y="20" width="320" height="460"/>
-                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                        <subviews>
-                            <imageView opaque="NO" userInteractionEnabled="NO" contentMode="scaleToFill" image="secret-society@2x.png" id="UnZ-Zk-s8t">
-                                <rect key="frame" x="0.0" y="-20" width="320" height="480"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                            </imageView>
-                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" text="" textAlignment="right" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumFontSize="10" adjustsFontSizeToFit="NO" id="eB6-aT-h3g">
-                                <rect key="frame" x="45" y="94" width="230" height="12"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="12"/>
-                                <color key="textColor" red="0.8862745098" green="0.89019607840000003" blue="0.86274509799999999" alpha="1" colorSpace="calibratedRGB"/>
-                                <color key="highlightedColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
-                            </label>
-                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" id="j95-la-sxl">
-                                <rect key="frame" x="104" y="184" width="113" height="37"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="15"/>
-                                <state key="normal" title="Next">
-                                    <color key="titleColor" red="0.19607843459999999" green="0.30980393290000002" blue="0.52156865600000002" alpha="1" colorSpace="calibratedRGB"/>
-                                    <color key="titleShadowColor" white="0.5" alpha="1" colorSpace="calibratedWhite"/>
-                                </state>
-                                <state key="highlighted">
-                                    <color key="titleColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
-                                </state>
-                                <connections>
-                                    <action selector="sendButtonPressed:" destination="QMd-8J-H38" eventType="touchUpInside" id="Bbq-G7-FGT"/>
-                                </connections>
-                            </button>
-                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Enter your Email" minimumFontSize="17" id="6YQ-sm-xAW">
-                                <rect key="frame" x="45" y="55" width="230" height="31"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                <textInputTraits key="textInputTraits" autocorrectionType="no" keyboardType="emailAddress" keyboardAppearance="alert" returnKeyType="send"/>
-                                <connections>
-                                    <outlet property="delegate" destination="QMd-8J-H38" id="Q4K-eq-qsa"/>
-                                </connections>
-                            </textField>
-                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" text="We will not spam you!" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumFontSize="10" id="HUt-Mn-qPw">
-                                <rect key="frame" x="45" y="115" width="230" height="47"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="17"/>
-                                <color key="textColor" white="1" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
-                                <nil key="highlightedColor"/>
-                            </label>
-                        </subviews>
-                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
-                    </view>
-                    <navigationItem key="navigationItem" id="Wae-pS-izf"/>
-                    <nil key="simulatedTopBarMetrics"/>
-                    <connections>
-                        <outlet property="emailTextField" destination="6YQ-sm-xAW" id="ffP-BW-pL3"/>
-                        <outlet property="emailValidationMessage" destination="eB6-aT-h3g" id="jwL-yh-Orf"/>
-                        <outlet property="sendButton" destination="j95-la-sxl" id="vS1-1y-bch"/>
-                        <outlet property="weWillNotSpamYouLabel" destination="HUt-Mn-qPw" id="v5X-hR-Ttf"/>
-                    </connections>
-                </viewController>
-            </objects>
-            <point key="canvasLocation" x="1194" y="105"/>
         </scene>
         <!--Navigation Controller-->
         <scene sceneID="xrB-8P-cbx">
             <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="2NC-Vb-K9M" userLabel="First Responder" sceneMemberID="firstResponder"/>
                 <navigationController storyboardIdentifier="EnterInvitationCodeNavigationController" definesPresentationContext="YES" id="AtA-s5-eJQ" sceneMemberID="viewController">
                     <navigationBar key="navigationBar" contentMode="scaleToFill" id="9bC-uq-M1l">
                         <autoresizingMask key="autoresizingMask"/>
@@ -105,13 +38,13 @@
                         <segue destination="YTE-Yd-6dA" kind="relationship" relationship="rootViewController" id="RKE-Su-NXd"/>
                     </connections>
                 </navigationController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="2NC-Vb-K9M" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="353" y="-490"/>
         </scene>
         <!--Enter Invitation Code View Controller-->
         <scene sceneID="0wN-58-DzG">
             <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="anz-G9-zjM" userLabel="First Responder" sceneMemberID="firstResponder"/>
                 <viewController storyboardIdentifier="EnterInvitationCodeViewController" id="YTE-Yd-6dA" customClass="EnterInvitationCodeViewController" sceneMemberID="viewController">
                     <view key="view" contentMode="scaleToFill" id="76G-9w-bA8">
                         <rect key="frame" x="0.0" y="20" width="320" height="460"/>
@@ -134,7 +67,7 @@
                             <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="4" baselineAdjustment="alignBaselines" minimumFontSize="10" id="gv0-xw-nqc">
                                 <rect key="frame" x="-118" y="229" width="558" height="90"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <string key="text">If another C&amp;P user has given
+                                <string key="text">If another Workclub user has given
 you an invite code, type it in above</string>
                                 <fontDescription key="fontDescription" type="system" pointSize="17"/>
                                 <color key="textColor" white="0.5" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
@@ -165,31 +98,35 @@ you an invite code, type it in above</string>
                         <outlet property="laterButton" destination="4iy-5M-HUK" id="RpN-pa-xaQ"/>
                     </connections>
                 </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="anz-G9-zjM" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="776" y="-503"/>
+            <point key="canvasLocation" x="776" y="-490"/>
         </scene>
         <!--Signup Controller-->
         <scene sceneID="sXP-07-Dtq">
             <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="uHK-uN-KEj" userLabel="First Responder" sceneMemberID="firstResponder"/>
                 <viewController storyboardIdentifier="SignupViewController" id="shZ-UI-Hx3" customClass="SignupController" sceneMemberID="viewController">
                     <view key="view" contentMode="scaleToFill" id="ctr-Ri-18F">
                         <rect key="frame" x="0.0" y="20" width="320" height="460"/>
                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <userGuides>
+                            <userLayoutGuide location="31" affinity="minX"/>
+                            <userLayoutGuide location="171" affinity="minX"/>
+                        </userGuides>
                         <subviews>
-                            <imageView opaque="NO" userInteractionEnabled="NO" contentMode="scaleToFill" image="secret-society@2x.png" id="WSu-w6-gVi">
+                            <imageView opaque="NO" userInteractionEnabled="NO" contentMode="scaleToFill" image="Default.png" id="WSu-w6-gVi">
                                 <rect key="frame" x="0.0" y="-20" width="320" height="480"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                             </imageView>
                             <button opaque="NO" contentMode="scaleAspectFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" id="zvy-bo-mbF">
-                                <rect key="frame" x="84" y="270" width="153" height="75"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                                <rect key="frame" x="98" y="304" width="124" height="74"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <fontDescription key="fontDescription" type="boldSystem" pointSize="15"/>
                                 <state key="normal" image="sign-up-with-linkedin.png">
                                     <color key="titleColor" red="0.19607843459999999" green="0.30980393290000002" blue="0.52156865600000002" alpha="1" colorSpace="calibratedRGB"/>
                                     <color key="titleShadowColor" white="0.5" alpha="1" colorSpace="calibratedWhite"/>
                                 </state>
-                                <state key="highlighted">
+                                <state key="highlighted" image="sign-up-with-linkedin-active.png">
                                     <color key="titleColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
                                 </state>
                                 <connections>
@@ -197,24 +134,20 @@ you an invite code, type it in above</string>
                                 </connections>
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" id="WNY-97-ttJ">
-                                <rect key="frame" x="110" y="381" width="100" height="37"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <rect key="frame" x="124" y="398" width="72" height="45"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <fontDescription key="fontDescription" name="HelveticaNeue-Light" family="Helvetica Neue" pointSize="15"/>
-                                <state key="normal" title="Later">
+                                <state key="normal" title="Later" image="sign-in-later.png">
                                     <color key="titleColor" red="0.78823529410000004" green="0.78823529410000004" blue="0.78823529410000004" alpha="1" colorSpace="calibratedRGB"/>
                                     <color key="titleShadowColor" white="0.5" alpha="1" colorSpace="calibratedWhite"/>
                                 </state>
-                                <state key="highlighted">
+                                <state key="highlighted" image="sign-in-later-active.png">
                                     <color key="titleColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
                                 </state>
                                 <connections>
                                     <action selector="dismissClick:" destination="shZ-UI-Hx3" eventType="touchUpInside" id="mNX-9b-H6B"/>
                                 </connections>
                             </button>
-                            <imageView userInteractionEnabled="NO" contentMode="scaleToFill" image="splash-screen-logo.png" id="dRs-gE-OEZ">
-                                <rect key="frame" x="111" y="16" width="112" height="193"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                            </imageView>
                         </subviews>
                         <color key="backgroundColor" red="0.15686274509803921" green="0.15686274509803921" blue="0.15686274509803921" alpha="1" colorSpace="calibratedRGB"/>
                     </view>
@@ -222,18 +155,19 @@ you an invite code, type it in above</string>
                     <nil key="simulatedTopBarMetrics"/>
                     <nil key="simulatedBottomBarMetrics"/>
                     <connections>
+                        <outlet property="backgroundImageView" destination="WSu-w6-gVi" id="ZPN-0K-b4t"/>
                         <outlet property="dismissButton" destination="WNY-97-ttJ" id="3KR-xT-XXq"/>
                         <outlet property="linkedinLoginButton" destination="zvy-bo-mbF" id="nTi-qa-AD2"/>
                         <segue destination="0fs-TN-110" kind="push" identifier="ShowLinkedInLoginController" id="Y4e-Sg-yKH"/>
                     </connections>
                 </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="uHK-uN-KEj" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="353" y="111"/>
         </scene>
         <!--Linked In Login Controller-->
         <scene sceneID="hi6-Mt-rjh">
             <objects>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="NP3-pU-1zh" userLabel="First Responder" sceneMemberID="firstResponder"/>
                 <viewController id="0fs-TN-110" customClass="LinkedInLoginController" sceneMemberID="viewController">
                     <view key="view" contentMode="scaleToFill" id="Qpp-4g-QP8">
                         <rect key="frame" x="0.0" y="64" width="320" height="416"/>
@@ -254,33 +188,85 @@ you an invite code, type it in above</string>
                     <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
                     <connections>
                         <outlet property="myWebView" destination="0aa-43-K68" id="Hew-Jl-YDO"/>
-                        <segue destination="QMd-8J-H38" kind="push" identifier="EnterEmailAfterSignUpSegue" id="1gc-hi-t6K"/>
                     </connections>
                 </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="NP3-pU-1zh" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="752" y="105"/>
+            <point key="canvasLocation" x="776" y="111"/>
+        </scene>
+        <!--Navigation Controller-->
+        <scene sceneID="4A0-lJ-PmL">
+            <objects>
+                <navigationController storyboardIdentifier="TutorialViewControllerNavigationViewController" definesPresentationContext="YES" navigationBarHidden="YES" id="nkh-8H-sOe" sceneMemberID="viewController">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" id="Rv1-ZQ-Pkz">
+                        <autoresizingMask key="autoresizingMask"/>
+                    </navigationBar>
+                    <connections>
+                        <segue destination="kdt-VF-ctH" kind="relationship" relationship="rootViewController" id="OoO-S1-AP4"/>
+                    </connections>
+                </navigationController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="yPa-TI-xQS" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="353" y="-1090"/>
+        </scene>
+        <!--Tutorial View Controller-->
+        <scene sceneID="3cL-jp-Gmd">
+            <objects>
+                <viewController storyboardIdentifier="TutorialViewController" id="kdt-VF-ctH" customClass="TutorialViewController" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="yAv-Qp-Ghj">
+                        <rect key="frame" x="0.0" y="20" width="320" height="460"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <subviews>
+                            <scrollView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" alwaysBounceHorizontal="YES" pagingEnabled="YES" showsHorizontalScrollIndicator="NO" showsVerticalScrollIndicator="NO" id="c8i-48-bnC">
+                                <rect key="frame" x="0.0" y="0.0" width="320" height="460"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <connections>
+                                    <outlet property="delegate" destination="kdt-VF-ctH" id="lOD-hS-TFS"/>
+                                </connections>
+                            </scrollView>
+                        </subviews>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
+                    </view>
+                    <navigationItem key="navigationItem" id="v7b-AG-AG0"/>
+                    <connections>
+                        <outlet property="scrollView" destination="c8i-48-bnC" id="LFC-Hb-hsp"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="IIT-xc-PIL" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="776" y="-1090"/>
         </scene>
     </scenes>
     <resources>
+        <image name="Default.png" width="320" height="480"/>
         <image name="invite-code-background.png" width="240" height="140"/>
-        <image name="secret-society@2x.png" width="640" height="960"/>
-        <image name="sign-up-with-linkedin.png" width="167" height="79"/>
-        <image name="splash-screen-logo.png" width="112" height="193"/>
+        <image name="sign-in-later-active.png" width="72" height="45"/>
+        <image name="sign-in-later.png" width="72" height="45"/>
+        <image name="sign-up-with-linkedin-active.png" width="124" height="74"/>
+        <image name="sign-up-with-linkedin.png" width="124" height="74"/>
         <image name="tab-login.png" width="34" height="26"/>
     </resources>
     <classes>
-        <class className="EnterInvitationCodeViewController" superclassName="UIViewController">
-            <source key="sourceIdentifier" type="project" relativePath="./Classes/EnterInvitationCodeViewController.h"/>
-            <relationships>
-                <relationship kind="action" name="laterButtonAction:"/>
-                <relationship kind="outlet" name="codeTextField" candidateClass="UITextField"/>
-                <relationship kind="outlet" name="laterButton" candidateClass="UIButton"/>
-            </relationships>
-        </class>
         <class className="LinkedInLoginController" superclassName="UIViewController">
             <source key="sourceIdentifier" type="project" relativePath="./Classes/LinkedInLoginController.h"/>
             <relationships>
                 <relationship kind="outlet" name="myWebView" candidateClass="UIWebView"/>
+            </relationships>
+        </class>
+        <class className="SignupController" superclassName="UIViewController">
+            <source key="sourceIdentifier" type="project" relativePath="./Classes/SignupController.h"/>
+            <relationships>
+                <relationship kind="action" name="dismissClick:"/>
+                <relationship kind="action" name="loginWithLinkedInTapped:"/>
+                <relationship kind="outlet" name="backgroundImageView" candidateClass="UIImageView"/>
+                <relationship kind="outlet" name="dismissButton" candidateClass="UIButton"/>
+                <relationship kind="outlet" name="linkedinLoginButton" candidateClass="UIButton"/>
+            </relationships>
+        </class>
+        <class className="TutorialViewController" superclassName="UIViewController">
+            <source key="sourceIdentifier" type="project" relativePath="./Classes/TutorialViewController.h"/>
+            <relationships>
+                <relationship kind="outlet" name="scrollView" candidateClass="UIScrollView"/>
             </relationships>
         </class>
     </classes>

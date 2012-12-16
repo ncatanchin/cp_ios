@@ -11,25 +11,17 @@
 #import "EditLinkedInInvitationMessageViewController.h"
 #import "AppDelegate.h"
 
-NSString * const kSubjectTemplate = @"%@ is inviting you to Coffee & Power";
-NSString * const kBodyTemplate = @"Hi! %@ is inviting you to join Coffee & Power, the mobile work network.\n\
-\n\
-If you haven't already, first download the Coffee & Power app in the iTunes app store.\n\
-\n\
-Your personal invite code is: %@\n\
-\n\
-This code is only good for 24 hours. If you accept this invitation, %@ will be shown as your sponsor on your Coffee & Power resume.\n\
-\n\
-Once signed up, you may sponsor other users with the 'Invite' button in the app settings page.\n\
-\n\
-Welcome!";
+NSString * const kSubjectTemplate = @"%@ is inviting you to Workclub";
+
+NSString * const kBodyTemplate = @"Hi! %@ is inviting you to join Workclub. Workclub is an app that lets you see who is working near you right now.\n\n\
+If %@ is also a LinkedIn contact, they will automatically be added to your Workclub contact list and you will be notified when they check in to workplaces.\n\n\
+If you have not already, download the app from the iTunes or Google Play stores.";
 
 @interface EditLinkedInInvitationMessageViewController ()
 
 @property (weak, nonatomic) IBOutlet UITextField *subjectTextField;
 @property (weak, nonatomic) IBOutlet UITextView *bodyTextView;
 
-- (IBAction)cancelAction;
 - (IBAction)sendAction;
 - (void)adjustViewForKeyboardVisible:(BOOL)visible withKeyboadrNotification:(NSNotification *)aNotification;
 - (NSData *)messageBodyData;
@@ -43,33 +35,9 @@ Welcome!";
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    [self setSendButtonEnabled:NO];
-    
-    [SVProgressHUD showWithStatus:@"Loading..."];
-    
-    [CPapi getInvitationCodeForLinkedInConnections:self.connectionIDs
-                               wihtCompletionBlock:
-     ^(NSDictionary *json, NSError *error) {
-         if (error) {
-             [SVProgressHUD dismissWithError:[error localizedDescription] afterDelay:kDefaultDismissDelay];
-             return;
-         }
-         
-         if ([[json objectForKey:@"error"] intValue]) {
-             [SVProgressHUD dismissWithError:[json objectForKey:@"payload"] afterDelay:kDefaultDismissDelay];
-             return;
-         }
-         
-         NSString *invitationCode = [[json objectForKey:@"payload"] objectForKey:@"code"];
-         
-         self.subjectTextField.text = [NSString stringWithFormat:kSubjectTemplate, self.nickname];
-         self.bodyTextView.text = [NSString stringWithFormat:kBodyTemplate,
-                                   self.nickname, invitationCode, self.nickname];
-         
-         [SVProgressHUD dismiss];
-         [self setSendButtonEnabled:YES];
-     }];
+
+    self.subjectTextField.text = [NSString stringWithFormat:kSubjectTemplate, self.nickname];
+    self.bodyTextView.text = [NSString stringWithFormat:kBodyTemplate, self.nickname, self.nickname];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -93,10 +61,6 @@ Welcome!";
 }
 
 #pragma mark - actions
-
-- (IBAction)cancelAction {
-    [self dismissModalViewControllerAnimated:YES];
-}
 
 - (IBAction)sendAction {
     [self.subjectTextField resignFirstResponder];
@@ -131,7 +95,7 @@ Welcome!";
         [[CPAppDelegate settingsMenuController] dismissViewControllerAnimated:YES
                                                                           completion:NULL];
         [SVProgressHUD dismissWithSuccess:@"Invitation has been sent"];
-        [FlurryAnalytics logEvent:@"invitedLinkedInConnections"];
+        [Flurry logEvent:@"invitedLinkedInConnections"];
     } else {
         [SVProgressHUD dismissWithError:[json objectForKey:@"message"] afterDelay:kDefaultDismissDelay];
         

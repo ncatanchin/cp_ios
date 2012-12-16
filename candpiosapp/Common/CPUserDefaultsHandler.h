@@ -10,11 +10,14 @@
 
 @interface CPUserDefaultsHandler : NSObject
 
-+ (void)setCurrentUser:(User *)currentUser;
-+ (User *)currentUser;
++ (void)setCurrentUser:(CPUser *)currentUser;
++ (CPUser *)currentUser;
 
 + (void)setCurrentVenue:(CPVenue *)venue;
 + (CPVenue *)currentVenue;
+
++ (void)setNumberOfContactRequests:(NSInteger)numberOfContactRequests;
++ (NSInteger)numberOfContactRequests;
 
 + (void)setPastVenues:(NSArray *)pastVenues;
 + (NSArray *)pastVenues;
@@ -28,10 +31,5 @@
 
 + (void)setAutomaticCheckins:(BOOL)on;
 + (BOOL)automaticCheckins;
-
-+ (void)addFeedVenue:(CPVenue *)venue;
-+ (NSDictionary *)feedVenues;
-+ (BOOL)hasFeedVenues;
-+ (void)removeFeedVenueWithID:(NSUInteger)venueID;
 
 @end

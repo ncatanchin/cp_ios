@@ -8,12 +8,11 @@
 
 #import "UserLoveViewController.h"
 #import "UserProfileViewController.h"
-#import "FlurryAnalytics.h"
+#import "Flurry.h"
 #import "CPSkill.h"
 #import "LoveSkillTableViewCell.h"
 
 #define LOVE_CHAR_LIMIT 140
-#define inAppItem @"com.coffeeandpower.love1"
 #define HEADER_SKILL_CELL_HEIGHT 38
 #define NORMAL_SKILL_CELL_HEIGHT 35
 #define ICON_LEFT_MARGIN 18
@@ -44,7 +43,7 @@
     self.descriptionTextView.delegate = self;
     
     // set the placeholder on our CPPlaceHolderTextView
-    self.descriptionTextView.placeholder = @"Type your recognition text here...";
+    self.descriptionTextView.placeholder = @"Type your endorsement text here...";
     self.descriptionTextView.placeholderColor = [UIColor colorWithR:153 G:153 B:153 A:1];
     
     // place the user's profile picture
@@ -76,7 +75,7 @@
     [self.view addSubview:self.keyboardBackground];
     
     // grab the user's skills
-    [CPapi getSkillsForUser:[NSNumber numberWithInt:self.user.userID] completion:^(NSDictionary *json, NSError *error) {
+    [CPapi getSkillsForUser:self.user.userID completion:^(NSDictionary *json, NSError *error) {
         if (!error) {
             if (![[json objectForKey:@"error"] boolValue]) {
                 
@@ -158,7 +157,7 @@
             }
             else {
                 // dismiss the HUD with the success message that came back
-                NSString *message = [NSString stringWithFormat:@"You Recognized %@", self.user.nickname];
+                NSString *message = [NSString stringWithFormat:@"You just endorsed %@", self.user.nickname];
 
                 // kill the progress HUD
                 [SVProgressHUD dismiss];
@@ -465,7 +464,7 @@
     [self dismissViewControllerAnimated:YES
                              completion:^{
                                  if (buttonIndex == alertView.firstOtherButtonIndex) {
-                                     [CPapi sendContactRequestToUserId:self.user.userID];
+                                     [CPapi sendContactRequestToUserID:self.user.userID];
                                  }
                              }];
 }

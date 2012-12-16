@@ -7,7 +7,7 @@
 //
 
 #import "LinkedInLoginController.h"
-#import "FlurryAnalytics.h"
+#import "Flurry.h"
 #import "OAConsumer.h"
 #import "OAMutableURLRequest.h"
 #import "OADataFetcher.h"
@@ -16,14 +16,16 @@
 #import "CPapi.h"
 #import "CPCheckinHandler.h"
 #import "CPUserSessionHandler.h"
+#import "CPAlertView.h"
+#import "TutorialViewController.h"
 
 typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
 
-@interface LinkedInLoginController ()
+@interface LinkedInLoginController () <UIAlertViewDelegate>
 
 @property (strong, nonatomic) AFHTTPClient *httpClient;
 @property (strong, nonatomic) LoadLinkedInConnectionsCompletionBlockType loadLinkedInConnectionsCompletionBlock;
-@property (nonatomic) BOOL emailConfirmationRequired;
+@property (nonatomic) BOOL isNewUser;
 
 @end
 
@@ -36,7 +38,7 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
     [super viewDidLoad];
     
     // create client for web based logins
-    self.httpClient = [AFHTTPClient clientWithBaseURL:[NSURL URLWithString:kCandPWebServiceUrl]];
+    self.httpClient = [AFHTTPClient clientWithBaseURL:[NSURL URLWithString:kCandPWebServiceSecureUrl]];
     // set a liberal cookie policy
     [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookieAcceptPolicy: NSHTTPCookieAcceptPolicyAlways];
 
@@ -53,7 +55,6 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
     {
         // token and token secret found in keychain
         // update user defaults and attempt login
-        NSLog(@"token:%@ account:%@", keyToken, keyTokenSecret);
         
         [[NSUserDefaults standardUserDefaults] setObject:keyToken forKey:@"linkedin_token"];
         [[NSUserDefaults standardUserDefaults] setObject:keyTokenSecret forKey:@"linkedin_secret"];
@@ -91,23 +92,19 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
         }
     }
     
-    NSString *token = [pairs objectForKey:@"oauth_token"];
-    NSString *verifier = [pairs objectForKey:@"oauth_verifier"];
-    
-    NSLog(@"Token: %@, Verifier: %@", token, verifier);
-    
+    self.requestToken.verifier = [pairs objectForKey:@"oauth_verifier"];
     
     // Now get the final auth token
     OAConsumer *consumer = [[OAConsumer alloc] initWithKey:kLinkedInKey secret:kLinkedInSecret];
     
     // TODO: Probably need to remove requestToken here and use the one passed
+    //        NSString *token = [pairs objectForKey:@"oauth_token"];
     //        OAToken *requestToken = [[OAToken alloc] initWithKey:token secret:nil];
     
     OAMutableURLRequest *request = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:@"https://api.linkedin.com/uas/oauth/accessToken"]
                                                                    consumer:consumer
                                                                       token:self.requestToken
                                                                       realm:@"http://api.linkedin.com/"
-                                                                   verifier:verifier
                                                           signatureProvider:nil];
     
     [request setHTTPMethod:@"POST"];
@@ -118,10 +115,6 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
                          delegate:self
                 didFinishSelector:@selector(requestTokenTicket:didFinishWithAccessToken:)
                   didFailSelector:@selector(requestTokenTicket:didFailWithError:)];
-    
-    NSLog(@"Dismiss window");
-    
-    
 }
 
 -(void)initiateLogin
@@ -135,18 +128,53 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
     [self linkedInLogin];
 }
 
-- (void)linkedInLogin {
-    NSLog(@"LinkedIn Login");
++ (void)linkedInLogout
+{
+    NSLog(@"LinkedIn Logout");
+    // clear the secrets
+    [SSKeychain deletePasswordForService:@"linkedin" account:@"token"];
+    [SSKeychain deletePasswordForService:@"linkedin" account:@"token_secret"];
     
+    // invalidate the token
     OAConsumer *consumer = [[OAConsumer alloc] initWithKey:kLinkedInKey secret:kLinkedInSecret];
-    
-    OAMutableURLRequest *request = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:@"https://api.linkedin.com/uas/oauth/requestToken"]
+    NSURL *url = [NSURL URLWithString:[kLinkedInAPIUrl stringByAppendingString:@"/uas/oauth/invalidateToken"]];
+    OAMutableURLRequest *request = [[OAMutableURLRequest alloc] initWithURL:url
                                                                    consumer:consumer
                                                                       token:nil
                                                                       realm:nil
                                                           signatureProvider:nil];
     
     [request setHTTPMethod:@"POST"];
+    
+    OARequestParameter *scopeParameter = [OARequestParameter requestParameter:@"scope" value:@"rw_nus w_messages r_fullprofile r_network r_emailaddress"];
+    [request setParameters:[NSArray arrayWithObject:scopeParameter]];
+    
+    // fire and forget our invalidate request
+    OADataFetcher *fetcher = [[OADataFetcher alloc] init];
+    [fetcher fetchDataWithRequest:request
+                         delegate:nil
+                didFinishSelector:nil
+                  didFailSelector:nil];
+}
+
+- (void)linkedInLogin {
+    NSLog(@"LinkedIn Login");
+    self.requestToken = nil;
+    OAConsumer *consumer = [[OAConsumer alloc] initWithKey:kLinkedInKey secret:kLinkedInSecret];
+    NSURL *url = [NSURL URLWithString:[kLinkedInAPIUrl stringByAppendingString:@"/uas/oauth/requestToken"]];
+    
+    // alloc init OAMutableURLRequest with custom callbackURL so that the app can capture credentials
+    OAMutableURLRequest *request = [[OAMutableURLRequest alloc] initWithURL:url
+                                                                   consumer:consumer
+                                                                      token:nil
+                                                                      realm:nil
+                                                                callbackURL:@"candp://linkedin"
+                                                          signatureProvider:nil];
+    
+    [request setHTTPMethod:@"POST"];
+
+    OARequestParameter *scopeParameter = [OARequestParameter requestParameter:@"scope" value:@"rw_nus w_messages r_fullprofile r_network r_emailaddress"];
+    [request setParameters:[NSArray arrayWithObject:scopeParameter]];
     
     OADataFetcher *fetcher = [[OADataFetcher alloc] init];
     
@@ -219,7 +247,7 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
 {
     self.requestToken = [CPLinkedInAPI shared].token;
     OAMutableURLRequest *request = [[CPLinkedInAPI shared] linkedInJSONAPIRequestWithRelativeURL:
-                                    @"v1/people/~:(id,first-name,last-name,headline,site-standard-profile-request,num-connections)"];
+                                    @"v1/people/~:(id,first-name,last-name,email-address)"];
     
     OADataFetcher *fetcher = [[OADataFetcher alloc] init];
     [fetcher fetchDataWithRequest:request
@@ -250,8 +278,7 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
     // Generate truly random password
     password = [NSString stringWithFormat:@"%d-%@", [[NSNumber numberWithDouble:[[NSDate date] timeIntervalSince1970]] intValue], [[NSProcessInfo processInfo] globallyUniqueString]];
     
-    // Assign an identifying email address (prompt user in the future?)
-    email = [NSString stringWithFormat:@"%@@linkedin.com", linkedinId];
+    email = [json objectForKey:@"emailAddress"];
     
     oauthToken = self.requestToken.key;
     oauthSecret = self.requestToken.secret;
@@ -263,10 +290,9 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
 
 - (void)handleLinkedInLogin:(NSString*)fullName linkedinID:(NSString *)linkedinID password:(NSString*)password email:(NSString *)email oauthToken:(NSString *)oauthToken oauthSecret:(NSString *)oauthSecret {
     // kick off the request to the candp server
-    NSString *generatedEmail = email;
     
     if (!linkedinID)
-    {
+    { 
         [self initiateLogin];
     }
     else
@@ -274,87 +300,26 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
         // TODO: Move this functionality to api.php
         
         NSMutableDictionary *loginParams = [NSMutableDictionary dictionary];
+
+        NSString *fullBuildVersion = [[NSString alloc] initWithFormat:@"%@.%@",
+                                      [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
+                                      [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"]];
         
         [loginParams setObject:fullName forKey:@"signupNickname"];
         [loginParams setObject:linkedinID forKey:@"linkedin_id"];
         [loginParams setObject:@"1" forKey:@"linkedin_connect"];
+        [loginParams setObject:@"2" forKey:@"linkedin_version"];
         [loginParams setObject:email forKey:@"signupUsername"];
         [loginParams setObject:oauthToken forKey:@"oauth_token"];
         [loginParams setObject:oauthSecret forKey:@"oauth_secret"];
         [loginParams setObject:password forKey:@"signupPassword"];
         [loginParams setObject:password forKey:@"signupConfirm"];
+        [loginParams setObject:@"0" forKey:@"reactivate"];
+        [loginParams setObject:kAppPlatform forKey:@"app_platform"];
+        [loginParams setObject:fullBuildVersion forKey:@"build_version"];
         [loginParams setObject:@"mobileSignup" forKey:@"action"];
         
-        [SVProgressHUD showWithStatus:@"Logging in..."];        
-
-        NSMutableURLRequest *request = [self.httpClient requestWithMethod:@"POST" path:@"api.php" parameters:loginParams];
-        AFJSONRequestOperation *operation = [AFJSONRequestOperation JSONRequestOperationWithRequest:request success:^(NSURLRequest *request, NSHTTPURLResponse *response, id JSON) {
-            NSInteger succeeded = [[JSON objectForKey:@"succeeded"] intValue];
-            NSLog(@"success: %d", succeeded);
-
-            if(succeeded == 0) {
-                NSString *outerErrorMessage = [JSON objectForKey:@"message"];// often just 'error'
-                // we get here if we failed to login
-                NSString *errorMessage = [NSString stringWithFormat:@"The error was: %@", outerErrorMessage];\
-                [SVProgressHUD showErrorWithStatus:errorMessage duration:kDefaultDismissDelay];
-                [[CPAppDelegate tabBarController]
-                        performSelector:@selector(dismissModalViewControllerAnimated:)
-                             withObject:[NSNumber numberWithBool:YES]
-                             afterDelay:kDefaultDismissDelay];
-
-            } else {
-                // remember that we're logged in!
-                // (it's really the persistent cookie that tracks our login, but we need a superficial indicator, too)
-                NSDictionary *userInfo = [[JSON objectForKey:@"params"] objectForKey:@"params"];
-                
-                [CPUserSessionHandler storeUserLoginDataFromDictionary:userInfo];
-
-                NSString *userId = [userInfo objectForKey:@"id"];
-                NSString *userEmail = [userInfo objectForKey:@"email"];
-                BOOL hasSentConfirmationEmail = [[userInfo objectForKey:@"has_confirm_string"] boolValue];
-
-                NSDictionary *checkInDict = [userInfo valueForKey:@"checkin_data"];
-                if ([[checkInDict objectForKey:@"checked_in"] boolValue]) {
-                    CPVenue *venue = [[CPVenue alloc] initFromDictionary:checkInDict];
-
-                    NSInteger checkOutTime =[[checkInDict objectForKey:@"checkout"] integerValue];
-                    [[CPCheckinHandler sharedHandler] saveCheckInVenue:venue
-                                    andCheckOutTime:checkOutTime];
-                } else {
-                    [[CPCheckinHandler sharedHandler] setCheckedOut];
-                }
-
-                [FlurryAnalytics logEvent:@"login_linkedin"];
-                [FlurryAnalytics setUserID:userId];
-                
-                [self loadLinkedInConnectionsWithCompletion:^{
-                    if (!hasSentConfirmationEmail && (! userEmail ||
-                                                       [@"" isEqualToString:userEmail] ||
-                                                      [generatedEmail isEqualToString:userEmail])) {
-                        self.emailConfirmationRequired = YES;
-                    }
-                    
-                    // hide the login progress HUD
-                    [SVProgressHUD dismiss];
-                    
-                    if (self.emailConfirmationRequired) {
-                        [self performSegueWithIdentifier:@"EnterEmailAfterSignUpSegue" sender:nil];
-                    } else {
-                        [CPUserSessionHandler performAfterLoginActions];
-                    }
-                }];
-            }
-
-            // Remove NSNotification as it's no longer needed once logged in
-            [[NSNotificationCenter defaultCenter] removeObserver:self name:@"linkedInCredentials" object:nil];
-
-        } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error, id JSON) {
-            [SVProgressHUD showErrorWithStatus:[error localizedDescription] duration:kDefaultDismissDelay];
-
-        }];
-        
-        NSOperationQueue *queue = [[NSOperationQueue alloc] init];
-        [queue addOperation:operation];  
+        [self makeSignupRequest:loginParams];
     }
 }
 
@@ -404,12 +369,180 @@ typedef void (^LoadLinkedInConnectionsCompletionBlockType)();
 #pragma mark UIWebViewDelegate methods
 
 -(void)webViewDidFinishLoad:(UIWebView *) webView {
-	[self.activityIndicator stopAnimating];
+    [self.activityIndicator stopAnimating];
+    
+    // Patch up the linkedIn login page so the Email input field has type required to show email keyboard.
+    // Remove once linkedIn fixes their webform.
+    NSRegularExpression *inputRegex = [NSRegularExpression regularExpressionWithPattern:@"<input type=\"text\" (.* placeholder=\"Email\">)"
+                                                                                options:NSRegularExpressionCaseInsensitive
+                                                                                  error:NULL];
+    NSString *html = [webView stringByEvaluatingJavaScriptFromString:@"document.documentElement.innerHTML;"];
+    NSString *modifiedHTML = [inputRegex stringByReplacingMatchesInString:html
+                                                                  options:NSRegularExpressionCaseInsensitive
+                                                                    range:NSMakeRange(0, [html length])
+                                                             withTemplate:@"<input type=\"email\" $1"];
+    if (![modifiedHTML isEqualToString:html]) {
+        [webView loadHTMLString:modifiedHTML baseURL:webView.request.URL];
+    }
 }
 
 -(void)webViewDidStartLoad:(UIWebView *) webView {
 	[self.activityIndicator startAnimating];
 }
 
+- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType
+{
+    if ([request.URL.scheme isEqualToString:@"http"] || [request.URL.scheme isEqualToString:@"https"]) {
+        if ([request.URL.description rangeOfString:@"candp"].location != NSNotFound ) {
+            // this was a cancel
+            if (webView.isLoading) {
+                [self.activityIndicator stopAnimating];
+                [webView stopLoading];
+            }
+            [self.navigationController popViewControllerAnimated:YES];
+            return NO;
+        } else {
+            return YES;
+        }
+    } else {
+        // handle candp:// url scheme
+        if ([[UIApplication sharedApplication] canOpenURL:request.URL]) {
+            [[UIApplication sharedApplication] openURL:request.URL];
+        }
+        return NO;
+    }
+}
 
+#pragma mark UIAlertViewDelegate
+-(void)alertView:(CPAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex
+{
+    if (buttonIndex == alertView.firstOtherButtonIndex) {
+        NSMutableDictionary *loginParams = (NSMutableDictionary *)alertView.context;
+        [loginParams setObject:@"1" forKey:@"reactivate"];
+        [self makeSignupRequest:loginParams];
+    } else {
+        [self close:0];
+    }
+}
+
+#pragma mark private
+
+-(void)makeSignupRequest:(NSMutableDictionary *)loginParams
+{
+    [SVProgressHUD showWithStatus:@"Logging in..."];
+
+    NSMutableURLRequest *request = [self.httpClient requestWithMethod:@"POST" path:@"api.php" parameters:loginParams];
+    AFJSONRequestOperation *operation = [AFJSONRequestOperation
+                                         JSONRequestOperationWithRequest:request
+                                         success:
+                                         ^(NSURLRequest *request, NSHTTPURLResponse *response, id json) {
+                                             NSInteger succeeded = [[json objectForKey:@"succeeded"] intValue];
+
+                                             if(succeeded == 0) {
+                                                 NSString *outerErrorMessage = [json objectForKey:@"message"];// often just 'error'
+                                                 // we get here if we failed to login
+                                                 NSString *errorMessage = [NSString stringWithFormat:@"The error was: %@", outerErrorMessage];
+                                                 [SVProgressHUD showErrorWithStatus:errorMessage duration:kDefaultDismissDelay];
+                                                 [self close:kDefaultDismissDelay];
+
+                                             } else {
+
+                                                 NSString *status = [json objectForKey:@"message"];
+
+                                                 [SVProgressHUD dismiss];
+
+                                                 if ([status isEqualToString:@"reactivate"]) {
+
+                                                     CPAlertView *alertView = [[CPAlertView alloc] initWithTitle:@"Inactive Account"
+                                                                                                         message:@"Your account is currently inactive. Would you like to reactivate it?"
+                                                                                                        delegate:self
+                                                                                               cancelButtonTitle:@"Cancel"
+                                                                                               otherButtonTitles:@"Reactivate", nil];
+                                                     alertView.context = loginParams;
+                                                     [alertView show];
+                                                 } else {
+                                                     [self completeLoginwithJSON:json];
+                                                 }
+
+                                             }
+                                             
+                                             
+                                         } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error, id JSON) {
+                                             [SVProgressHUD showErrorWithStatus:[error localizedDescription] duration:kDefaultDismissDelay];
+                                             
+                                         }];
+
+    NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+    [queue addOperation:operation];
+}
+
+-(void)close:(int)afterDelay
+{
+    [self performSelector:@selector(dismissModalViewControllerAnimated:)
+               withObject:[NSNumber numberWithBool:YES]
+               afterDelay:afterDelay];
+
+    // Remove NSNotification as it's no longer needed once logged in
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"linkedInCredentials" object:nil];
+}
+
+-(void)completeLoginwithJSON:(NSDictionary *)json
+{
+    @try {
+        NSDictionary *userInfo = json[@"params"][@"params"];
+        NSLog(@"%@", userInfo);
+        if (userInfo) {
+            [CPUserSessionHandler storeUserLoginDataFromDictionary:userInfo];
+
+            NSString *userId = [userInfo objectForKey:@"id"];
+
+            self.isNewUser = [[userInfo objectForKey:@"new_user"] boolValue];
+            
+            NSDictionary *checkInDict = [userInfo valueForKey:@"checkin_data"];
+            if ([[checkInDict objectForKey:@"checked_in"] boolValue]) {
+                CPVenue *venue = [[CPVenue alloc] initFromDictionary:checkInDict];
+
+                NSInteger checkOutTime =[[checkInDict objectForKey:@"checkout"] integerValue];
+                [CPCheckinHandler saveCheckInVenue:venue
+                                   andCheckOutTime:checkOutTime];
+            } else {
+                [[CPCheckinHandler sharedHandler] setCheckedOut];
+            }
+
+            [Flurry logEvent:@"login_linkedin"];
+            [Flurry setUserID:userId];
+            
+            [CPUserSessionHandler performAfterLoginActions];
+            
+            if ([json[@"status"] isEqualToString:@"welcome-back"]) {
+                
+                NSString *infoMessage = @"Welcome back!"
+                @"\nYour inactive account has been reactivated and you have been logged in.";
+                
+                [SVProgressHUD showSuccessWithStatus:infoMessage
+                                            duration:kDefaultDismissDelay];
+            }
+            
+            [self loadLinkedInConnectionsWithCompletion:^{
+                if (self.isNewUser) {
+                    UIStoryboard *signupStoryboard = [UIStoryboard storyboardWithName:@"SignupStoryboard_iPhone" bundle:nil];
+                    UINavigationController *navigationViewController = [signupStoryboard instantiateViewControllerWithIdentifier:@"TutorialViewControllerNavigationViewController"];
+                    
+                    TutorialViewController *viewController = (TutorialViewController *)navigationViewController.topViewController;
+                    [self.navigationController pushViewController:viewController animated:YES];
+                } else {
+                    [self close:kDefaultDismissDelay];
+                }
+            }];
+        }
+    }
+    @catch (NSException* ex) {
+        [Flurry logError:@"login_linkedin"
+                          message:ex.description
+                        exception:ex];
+
+        [SVProgressHUD showErrorWithStatus:@"Error occurred during the login process. Please, try again later."
+                                    duration:kDefaultDismissDelay];
+    }
+}
 @end

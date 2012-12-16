@@ -14,26 +14,28 @@
 #define kInCityText @"in city"
 #define kContactsText @"contacts"
 
+#define kNotificationsViewPosition 295
+#define kAnyoneChatViewPosition 75
+#define kQuietTimeOffset 40
+
 @interface ProfileNotificationsViewController () <UIActionSheetDelegate>
 
 @property (strong, nonatomic) NSDate *quietTimeFromDate;
 @property (strong, nonatomic) NSDate *quietTimeToDate;
 @property (weak, nonatomic) IBOutlet UIButton *venueButton;
+@property (weak, nonatomic) IBOutlet UISwitch *notificationsSwitch;
 @property (weak, nonatomic) IBOutlet UISwitch *checkedInOnlySwitch;
+@property (weak, nonatomic) IBOutlet UISwitch *notifyOnEndorsementSwitch;
+@property (weak, nonatomic) IBOutlet UISwitch *notifyHeadlineChangesSwitch;
 @property (weak, nonatomic) IBOutlet UISwitch *quietTimeSwitch;
 @property (weak, nonatomic) IBOutlet UIView *anyoneChatView;
 @property (weak, nonatomic) IBOutlet UIButton *quietFromButton;
 @property (weak, nonatomic) IBOutlet UIButton *quietToButton;
 @property (weak, nonatomic) IBOutlet UISwitch *contactsOnlyChatSwitch;
 @property (weak, nonatomic) IBOutlet UILabel *chatNotificationLabel;
-@property (weak, nonatomic) IBOutlet UIView *headerView;
+@property (weak, nonatomic) IBOutlet UIView *dimView;
 @property (weak, nonatomic) IBOutlet UIView *fromToSuperview;
-
-- (IBAction)selectVenueCity:(UIButton *)sender;
-- (IBAction)quietFromClicked:(UIButton *)sender;
-- (IBAction)quietToClicked:(UIButton *)sender;
-- (IBAction)quietTimeValueChanged:(UISwitch *)sender;
-- (IBAction)anyoneChatSwitchChanged:(id)sender;
+@property (weak, nonatomic) IBOutlet UIView *notificationsView;
 
 - (void)setVenue:(NSString *)setting;
 
@@ -75,17 +77,28 @@
             [SVProgressHUD dismissWithError:message
                                  afterDelay:kDefaultDismissDelay];
         } else {
+
             NSDateFormatter *dateFormat = [[NSDateFormatter alloc] init];
             [dateFormat setDateFormat:@"HH:mm:ss"];
             [dateFormat setTimeZone:[NSTimeZone localTimeZone]];
             
             NSDictionary *dict = [json objectForKey:@"payload"];
 
+            NSString *receiveNotifications = (NSString *)[dict objectForKey:@"receive_push_notifications"];
+            [[self notificationsSwitch] setOn:[receiveNotifications isEqualToString:@"1"]];
+            [self notificationSwitchChanged:self.notificationsSwitch];
+
             NSString *venue = (NSString *)[dict objectForKey:@"push_distance"];
             [self setVenue:venue];
 
             NSString *checkInOnly = (NSString *)[dict objectForKey:@"checked_in_only"];
             [[self checkedInOnlySwitch] setOn:[checkInOnly isEqualToString:@"1"]];
+
+            NSString *notifyOnEndorsement = [dict objectForKey:@"push_contacts_endorsement"];
+            [[self notifyOnEndorsementSwitch] setOn:[notifyOnEndorsement isEqualToString:@"1"]];
+
+            NSString *notifyHealdineChanges = [dict objectForKey:@"push_headline_changes"];
+            [[self notifyHeadlineChangesSwitch] setOn:[notifyHealdineChanges isEqualToString:@"1"]];
 
             NSString *quietTime = (NSString *)[dict objectForKey:@"quiet_time"];
             [[self quietTimeSwitch] setOn:[quietTime isEqualToString:@"1"]];
@@ -143,9 +156,12 @@
     else if ([self.venueButton.currentTitle isEqualToString:kContactsText]) {
         distance = @"contacts";
     }
-    
+
     [CPapi setNotificationSettingsForDistance:distance
+                         receiveNotifications:self.notificationsSwitch.on
                                  andCheckedId:self.checkedInOnlySwitch.on
+                       receiveContactEndorsed:self.notifyOnEndorsementSwitch.on
+                        contactHeadlineChange:self.notifyHeadlineChangesSwitch.on
                                     quietTime:self.quietTimeSwitch.on
                                 quietTimeFrom:[self quietTimeFromDate]
                                   quietTimeTo:[self quietTimeToDate]
@@ -158,6 +174,16 @@
 {
     [self dismissPushModalViewControllerFromLeftSegue];
 }
+
+- (IBAction)notificationSwitchChanged:(UISwitch *)sender
+{
+    [UIView animateWithDuration:0.3
+                     animations:^{
+                         self.dimView.alpha = sender.on ? 0 : 1;
+                         self.dimView.userInteractionEnabled = !sender.on;
+                     }];
+}
+
 
 - (IBAction)quietFromClicked:(UIButton *)sender
 {
@@ -178,6 +204,7 @@
                                         action:@selector(timeWasSelected:element:)
                                         origin:sender];
 }
+
 
 - (void)timeWasSelected:(NSDate *)selectedTime element:(id)element
 {
@@ -214,16 +241,14 @@
 
 - (void)actionSheet:(UIActionSheet *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex
 {
-    NSString *selection = @"city";
-    if (buttonIndex == 1) {
-        selection = @"venue";
+    if (buttonIndex == 0) {
+        [self setVenue:@"city"];
+    } else if (buttonIndex == 1) {
+        [self setVenue:@"venue"];
+    } else if (buttonIndex == 2) {
+        [self setVenue:@"contacts"];
     }
-    
-    else if (buttonIndex == 2) {
-        selection = @"contacts";
-    }
-
-    [self setVenue:selection];
+    // Do nothing if "Cancel" was hit
 }
 
 - (void)setVenue:(NSString *)setting
@@ -244,16 +269,18 @@
 - (void)setQuietTime:(BOOL)quietTime
 {
     [UIView animateWithDuration:0.3 animations:^ {
-        CGRect fromToFrame = self.fromToSuperview.frame;
-        CGFloat anyoneChatViewY = fromToFrame.origin.y;
-        if (quietTime) {
-            anyoneChatViewY += fromToFrame.size.height;
-        }
-
         CGRect anyoneChatFrame = self.anyoneChatView.frame;
-        anyoneChatFrame.origin.y = anyoneChatViewY;
-        
+        CGRect notificationsFrame = self.notificationsView.frame;
+
+        if (quietTime) {
+            anyoneChatFrame.origin.y = kNotificationsViewPosition;
+            notificationsFrame.origin.y = kAnyoneChatViewPosition;
+        } else {
+            notificationsFrame.origin.y = kAnyoneChatViewPosition - kQuietTimeOffset;
+            anyoneChatFrame.origin.y = kNotificationsViewPosition - kQuietTimeOffset;
+        }
         self.anyoneChatView.frame = anyoneChatFrame;
+        self.notificationsView.frame = notificationsFrame;
     }];
 }
 
@@ -266,5 +293,8 @@
     
     return dateString;
 }
-
+- (void)viewDidUnload {
+    [self setNotificationsView:nil];
+    [super viewDidUnload];
+}
 @end

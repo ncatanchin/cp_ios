@@ -9,19 +9,28 @@
 #import "CPCheckinHandler.h"
 #import "CPGeofenceHandler.h"
 #import "CPUserSessionHandler.h"
+#import "UserVoice.h"
+#import "AppDelegate.h"
+#import "PushModalViewControllerFromLeftSegue.h"
+#import "TutorialViewController.h"
+#import "ProfileViewController.h"
 
 #define menuWidthPercentage 0.8
-#define kEnterInviteFakeSegueID @"--kEnterInviteFakeSegueID"
+#define kFeedbackSegueID @"ShowFeedbackFromMenu"
+#define kTutorialSegueID @"ShowTutorialFromMenu"
+#define kProfileSegueID @"ShowUserSettingsFromMenu"
+#define kProfilePickedImageSegueID @"ShowUserSettingsFromMenuForPickedImage"
 
 @interface SettingsMenuController() <UITabBarControllerDelegate>
 
+@property (weak, nonatomic) IBOutlet UILabel *versionNumberLabel;
+@property (weak, nonatomic) IBOutlet UIButton *termsOfServiceButton;
 @property (strong, nonatomic) NSArray *menuStringsArray;
 @property (strong, nonatomic) NSArray *menuSegueIdentifiersArray;
 @property (strong, nonatomic) UITapGestureRecognizer *menuCloseGestureRecognizer;
 @property (strong, nonatomic) UIPanGestureRecognizer *menuClosePanGestureRecognizer;
 @property (strong, nonatomic) UIPanGestureRecognizer *menuClosePanFromNavbarGestureRecognizer;
-@property (strong, nonatomic) UIPanGestureRecognizer *menuClosePanFromTabbarGestureRecognizer;
-@property (strong, nonatomic) UITapGestureRecognizer *menuCloseTapFromTabbarGestureRecognizer;
+@property (strong, nonatomic) UIImage *pickedImage;
 @property (nonatomic) CGPoint panStartLocation;
 
 - (void)setMapAndButtonsViewXOffset:(CGFloat)xOffset;
@@ -32,34 +41,26 @@
 
 - (void)initMenu 
 {
-    NSString *inviteItemName = @"Invite";
-    NSString *inviteItemSegue = @"ShowInvitationCodeMenu";
-    
-    if (![CPUserDefaultsHandler currentUser].enteredInviteCode) {
-        inviteItemName = @"Enter invite code";
-        inviteItemSegue = kEnterInviteFakeSegueID;
-    }
-    
     // Setup the menu strings and seque identifiers
     self.menuStringsArray = [NSArray arrayWithObjects:
-                             // @"Face To Face", DISABLED (alexi)
-                             inviteItemName,
-                             // @"Wallet", DISABLED (WL #17339 - andyast)
+                             @"Invite",
                              @"Profile",
                              @"Linked Accounts",
                              @"Notifications",
-                             @"Support",
+                             @"Automatic Check Ins",
+                             @"Feedback",
+                             @"Tutorial",
                              @"Logout",
                              nil];
     
     self.menuSegueIdentifiersArray = [NSArray arrayWithObjects:
-                                      inviteItemSegue,
-                                      // @"ShowFaceToFaceFromMenu", DISABLED (alexi)
-                                      // @"ShowBalanceFromMenu", DISABLED (WL #17339 - andyast)
+                                      @"ShowInvitationCodeMenu",
                                       @"ShowUserSettingsFromMenu",
                                       @"ShowFederationFromMenu",
                                       @"ShowNotificationsFromMenu",
-                                      @"ShowSupportFromMenu",
+                                      @"ShowAutoCheckInsFromMenu",
+                                      kFeedbackSegueID,
+                                      kTutorialSegueID,
                                       @"ShowLogoutFromMenu",
                                       nil];
     
@@ -74,15 +75,7 @@
     _f2fInviteAlert.delegate = self;
 }
 
-- (void)setF2fPasswordAlert:(UIAlertView *)f2fPasswordAlert 
-{
-    _f2fPasswordAlert = f2fPasswordAlert;
-    _f2fPasswordAlert.delegate = self;
-}
-
 #pragma mark - View lifecycle
-
-// Implement viewDidLoad to do additional setup after loading the view, typically from a nib.
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -96,15 +89,15 @@
                                              selector:@selector(performAfterLoginActionIfRequired)
                                                  name:@"LoginStateChanged"
                                                object:nil];
+    
+    [self placeVersionNumberAndTermsButton];
 }
 
 - (void)viewDidUnload
 {
     [super viewDidUnload];
-    // Release any retained subviews of the main view.
-    // e.g. self.myOutlet = nil;
     
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"LoginStateChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"LoginStateChanged" object:nil];    
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -165,31 +158,24 @@
     
     int touchViewTag = 3040;
     
+    // add a view in front of the tab bar controller to handle pan and tap
     UINavigationController *visibleNC = (UINavigationController *)self.cpTabBarController.selectedViewController;
-    UIViewController *visibleVC = visibleNC.visibleViewController; 
-    
-    // make sure we have a touchView layer
-    UIView *touchView = [visibleVC.view viewWithTag:touchViewTag];
+    UIView *touchView = [self.cpTabBarController.view viewWithTag:touchViewTag];
     
     if (!touchView) {
-        // place an invisible view over the VC's view to handle touch
-        CGRect touchFrame = CGRectMake(0, 0, visibleVC.view.frame.size.width, visibleVC.view.frame.size.height);
+        // height of the touch view is the device height, minus navigation bar
+        CGFloat navBarHeight = visibleNC.navigationBar.frame.size.height;
+        CGFloat touchViewHeight = self.cpTabBarController.view.frame.size.height - navBarHeight;
+       
+        CGRect touchFrame = CGRectMake(0,
+                                       navBarHeight,
+                                       self.cpTabBarController.view.frame.size.width,
+                                       touchViewHeight);
         touchView = [[UIView alloc] initWithFrame:touchFrame];
         touchView.tag = touchViewTag;
-        [visibleVC.view addSubview:touchView];        
+        [self.cpTabBarController.view addSubview:touchView];
     }   
-    
-    // make sure we have a tabTouch layer over the tabBar
-    UIView *tabTouch = [self.cpTabBarController.tabBar viewWithTag:touchViewTag];
-    
-    if (!tabTouch) {
-        // place an invisible view over the tab bar to handle tap
-        CGRect tabFrame = CGRectMake(0, 0, self.cpTabBarController.tabBar.frame.size.width, self.cpTabBarController.tabBar.frame.size.height);
-        tabTouch = [[UIView alloc] initWithFrame:tabFrame];
-        tabTouch.tag = touchViewTag;
-        [self.cpTabBarController.tabBar addSubview:tabTouch];
-    }
-   
+
     if (showMenu) {
         
         // shift to the right, hiding buttons 
@@ -210,17 +196,7 @@
         if (!self.menuClosePanFromNavbarGestureRecognizer) { 
             // Pan to close from navbar
             self.menuClosePanFromNavbarGestureRecognizer = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(menuClosePan:)];
-            [visibleVC.navigationController.navigationBar addGestureRecognizer:self.menuClosePanFromNavbarGestureRecognizer];
-        }
-        if (!self.menuClosePanFromTabbarGestureRecognizer) {
-            // Pan to close from tab bar
-            self.menuClosePanFromTabbarGestureRecognizer = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(menuClosePan:)];
-            [tabTouch addGestureRecognizer:self.menuClosePanFromTabbarGestureRecognizer];
-        }
-        if (!self.menuCloseTapFromTabbarGestureRecognizer) {
-            // Tap to close from tab bar
-            self.menuCloseTapFromTabbarGestureRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closeMenu)];
-            [tabTouch addGestureRecognizer:self.menuCloseTapFromTabbarGestureRecognizer];
+            [visibleNC.navigationBar addGestureRecognizer:self.menuClosePanFromNavbarGestureRecognizer];
         }
     } else {
         // shift to the left, restoring the buttons
@@ -235,21 +211,56 @@
         // remove the touch view from the VC
         [touchView removeFromSuperview];
         
-        [visibleVC.navigationController.navigationBar removeGestureRecognizer:self.menuClosePanFromNavbarGestureRecognizer];
+        [visibleNC.navigationBar removeGestureRecognizer:self.menuClosePanFromNavbarGestureRecognizer];
         self.menuClosePanFromNavbarGestureRecognizer = nil;
-        
-        [tabTouch removeGestureRecognizer:self.menuClosePanFromTabbarGestureRecognizer];
-        self.menuClosePanFromTabbarGestureRecognizer = nil; 
-        
-        [tabTouch removeGestureRecognizer:self.menuCloseTapFromTabbarGestureRecognizer];
-        self.menuCloseTapFromTabbarGestureRecognizer = nil; 
-        
-        // remove the tab touch view from the tab bar
-        [tabTouch removeFromSuperview];
-        
     }
     [UIView commitAnimations];
     self.isMenuShowing = showMenu ? 1 : 0;
+}
+
+- (void)placeVersionNumberAndTermsButton
+{
+    // give the label the current version number
+    self.versionNumberLabel.text = [NSString stringWithFormat:@"| v%@", [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
+    
+    // grab the frames for the versionNumberLabel and the termsOfServiceButton
+    CGRect versionFrame = self.versionNumberLabel.frame;
+    CGRect termsFrame = self.termsOfServiceButton.frame;
+    
+    // shrink the version number label horizontally to just fit the contents
+    versionFrame.size.width = [self.versionNumberLabel.text sizeWithFont:self.versionNumberLabel.font].width;
+    
+    // find total width of both button and label
+    CGFloat buttonLabelWidth = termsFrame.size.width + versionFrame.size.width;
+    
+    // give the TOS button frame its new origin
+    termsFrame.origin.x = self.tableView.center.x - (buttonLabelWidth / 2);
+    
+    // give the version number frame its new origin
+    versionFrame.origin.x = termsFrame.origin.x + termsFrame.size.width;
+    
+    // give both elements their new frames
+    self.versionNumberLabel.frame = versionFrame;
+    self.termsOfServiceButton.frame = termsFrame;
+    
+    // ugly way to add an underline to the TOS button that will sit under the text
+    
+    // make the underline 75% of the width of the button
+    CGFloat underlineWidth = 0.75 * termsFrame.size.width;
+    
+    // alloc-init a 1pt tall underline 
+    UIView *underline = [[UIView alloc] initWithFrame:CGRectMake((termsFrame.size.width / 2) - (underlineWidth / 2), termsFrame.size.height - 6, underlineWidth, 1)];
+    
+    // give it the same color as the text
+    underline.backgroundColor = self.termsOfServiceButton.titleLabel.textColor;
+    
+    // add it to the existing button
+    [self.termsOfServiceButton addSubview:underline];
+}
+
+- (IBAction)showTermsOfServiceModal:(id)sender
+{
+    [self performSegueWithIdentifier:@"ShowTermsOfServiceModal" sender:self];
 }
 
 #pragma mark - Table view data source
@@ -269,7 +280,7 @@
     static NSString *CellIdentifier = @"Cell";
     
     UITableViewCell *cell = [aTableView dequeueReusableCellWithIdentifier:CellIdentifier];
-    if (cell == nil) {
+    if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
         // Style the cell's font and background. clear the background colors so style is not obstructed.
         cell.textLabel.font = [UIFont fontWithName:@"HelveticaNeue" size:20.0];
@@ -334,13 +345,22 @@
 
     } else {
         NSString *segueID = [self.menuSegueIdentifiersArray objectAtIndex:indexPath.row];
-        NSLog(@"You clicked on %@", segueID);
-        
-        if ([kEnterInviteFakeSegueID isEqual:segueID]) {
-            [CPUserSessionHandler showEnterInvitationCodeModalFromViewController:self
-                                     withDontShowTextNoticeAfterLaterButtonPressed:YES
-                                                                      pushFromLeft:YES
-                                                                          animated:YES];
+        if ([segueID isEqualToString:kFeedbackSegueID]) {
+            UVConfig *config = [UVConfig configWithSite:kUserVoiceSite
+                                                 andKey:kUserVoiceKey
+                                              andSecret:kUserVoiceSecret];
+            [UserVoice presentUserVoiceForumForParentViewController:self andConfig:config];
+        } else if ([segueID isEqualToString:kTutorialSegueID]) {
+            UIStoryboard *signupStoryboard = [UIStoryboard storyboardWithName:@"SignupStoryboard_iPhone" bundle:nil];
+            UINavigationController *navigationViewController = [signupStoryboard instantiateViewControllerWithIdentifier:@"TutorialViewControllerNavigationViewController"];
+
+            TutorialViewController *viewController = (TutorialViewController *)navigationViewController.topViewController;
+            viewController.isShownFromLeft = YES;
+
+            PushModalViewControllerFromLeftSegue *segue = [[PushModalViewControllerFromLeftSegue alloc] initWithIdentifier:kTutorialSegueID
+                                                                                                                    source:self
+                                                                                                               destination:navigationViewController];
+            [segue perform];
         } else {
             [self performSegueWithIdentifier:segueID sender:self];
         }
@@ -349,10 +369,7 @@
 
 - (void)alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex
 {
-    if (buttonIndex == 1 && [[alertView buttonTitleAtIndex:1] isEqualToString:@"Wallet"]) {
-        // the user wants to see their wallet, so let's do that
-        [self performSegueWithIdentifier:@"ShowBalanceFromMenu" sender:self];
-    } else if (alertView.tag == 904 && buttonIndex == 1) {
+    if (alertView.tag == 904 && buttonIndex == 1) {
         [SVProgressHUD showWithStatus:@"Checking out..."];
         
         [CPapi checkOutWithCompletion:^(NSDictionary *json, NSError *error) {
@@ -394,13 +411,13 @@
             // Start monitoring the new location to allow auto-checkout and checkin (if enabled) 
             autoPromptVenue.autoCheckin = YES;
             [[CPGeofenceHandler sharedHandler] startMonitoringVenue:autoPromptVenue];
-            [FlurryAnalytics logEvent:@"autoCheckInPromptAccepted"];
+            [Flurry logEvent:@"autoCheckInPromptAccepted"];
         }
         else if (buttonIndex == 2) {
             autoPromptVenue.autoCheckin = NO;
             // User does NOT want to automatically check in to this venue        
             [[CPGeofenceHandler sharedHandler] stopMonitoringVenue:autoPromptVenue];
-            [FlurryAnalytics logEvent:@"autoCheckInPromptDenied"];
+            [Flurry logEvent:@"autoCheckInPromptDenied"];
         }
     
         // add this venue to the array of past venues in NSUserDefaults
@@ -433,24 +450,56 @@
     if ([CPUserDefaultsHandler currentUser]) {
         // we have a current user so check if the settings menu controller has an action to perform after login
         switch (self.afterLoginAction) {
-            case CPAfterLoginActionShowLogbook:
-                // show the logbook
-                [CPAppDelegate tabBarController].selectedIndex = 0;
-                break;
-            case CPAfterLoginActionAddNewLog:
-                // show the logbook and allow the user to enter a new log entry
-                [[CPAppDelegate tabBarController] updateButtonPressed:nil];
-                break;
-            case CPAfterLoginActionPostQuestion:
-                [[CPAppDelegate tabBarController] questionButtonPressed:nil];
-                break;
             case CPAfterLoginActionShowMap:
-                [CPAppDelegate tabBarController].selectedIndex = 1;
+                [CPAppDelegate tabBarController].selectedIndex = 0;
             default:
                 // do nothing, the action is CPAfterLoginActionNone
                 break;
         }
     }
+}
+
+#pragma mark - prepareForSegue
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender
+{
+    if ([segue.identifier isEqualToString:kProfilePickedImageSegueID]) {
+        ((ProfileViewController *) [segue.destinationViewController topViewController]).profileImageToUpload = self.pickedImage;
+    }
+}
+
+#pragma mark - UIImagePickerController
+- (void)showProfilePicturePickerModalForSource:(UIImagePickerControllerSourceType)imagePickerSource
+{
+    UIImagePickerController *imagePickerController = [[UIImagePickerController alloc] init];
+    imagePickerController.delegate = self;
+    imagePickerController.sourceType = imagePickerSource;
+    
+    if (imagePickerSource == UIImagePickerControllerSourceTypeCamera) {
+        if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerCameraDeviceFront]) {
+            imagePickerController.cameraDevice = UIImagePickerControllerCameraDeviceFront;
+        }
+    }
+    
+    [self.presentedViewController dismissPushModalViewControllerFromLeftSegueWithCompletion:^{
+        [self presentViewController:imagePickerController animated:YES completion:nil];
+    }];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info
+{
+    self.pickedImage = info[UIImagePickerControllerOriginalImage];
+    
+    [self dismissViewControllerAnimated:YES completion:^{
+        [self performSegueWithIdentifier:kProfilePickedImageSegueID sender:self];
+    }];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker
+{
+    [self dismissViewControllerAnimated:YES completion:^{
+        [self performSegueWithIdentifier:kProfileSegueID sender:self];
+    }];
+    
 }
 
 @end

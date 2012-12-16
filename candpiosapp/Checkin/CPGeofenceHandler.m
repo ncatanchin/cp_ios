@@ -13,7 +13,6 @@
 
 #define kGeoFenceAlertTag 601
 #define kRadiusForCheckins 10 // measure in meters, from lat/lng of CPVenue
-#define kMaxCheckInDuration 24
 
 @implementation CPGeofenceHandler
 
@@ -59,56 +58,46 @@ static CPGeofenceHandler *sharedHandler;
     
     [CPapi saveVenueAutoCheckinStatus:venue];
     
-    [FlurryAnalytics logEvent:@"automaticCheckinLocationDisabled"];
+    [Flurry logEvent:@"automaticCheckinLocationDisabled"];
 }
 
 - (void)autoCheckInForVenue:(CPVenue *)venue
 {
-    // Check the user in automatically now
-    
-    [FlurryAnalytics logEvent:@"autoCheckedIn"];
-    
-    NSTimeInterval checkInTime = [[NSDate date] timeIntervalSince1970];
-    // Set a maximum checkInDuration to 24 hours
-    NSInteger checkInDuration = kMaxCheckInDuration;
-    
-    NSInteger checkOutTime = checkInTime + checkInDuration * 3600;
-    NSString *statusText = @"";
-    
     // use CPapi to checkin
-    [CPApiClient checkInToVenue:venue hoursHere:checkInDuration statusText:statusText isVirtual:NO isAutomatic:YES completionBlock:^(NSDictionary *json, NSError *error){
-        
+    [CPApiClient autoCheckInToVenue:venue
+                         completion:^(NSDictionary *json, NSError *error)
+    {
+         if (!error) {
+             [Flurry logEvent:@"autoCheckInRequest" withParameters:json timed:YES];
+         }
+    }];
+}
+
+- (void)handleAutoCheckOutForVenue:(CPVenue *)venue
+{
+    if ([CPUserDefaultsHandler isUserCurrentlyCheckedIn] && [[CPUserDefaultsHandler currentVenue].venueID isEqualToNumber:venue.venueID]) {
+        [self autoCheckOutForVenue:venue];
+    }
+    
+    if ([CPCheckinHandler sharedHandler].pendingAutoCheckInVenue) {
+        [self cancelAutoCheckInRequest:venue];
+    }
+}
+
+- (void)cancelAutoCheckInRequest:(CPVenue *)venue
+{
+    [CPApiClient cancelAutoCheckInRequestToVenue:venue
+                                  WithCompletion:^(NSDictionary *json, NSError *error)
+    {
         if (!error) {
-            if (![[json objectForKey:@"error"] boolValue]) {
-                
-                // Cancel all old local notifications
-                [[UIApplication sharedApplication] cancelAllLocalNotifications];
-                
-                // post a notification to say the user has checked in
-                [[NSNotificationCenter defaultCenter] postNotificationName:@"userCheckInStateChange" object:nil];
-                
-                [[CPCheckinHandler sharedHandler] setCheckedOut];
-                
-                [CPUserDefaultsHandler setCheckoutTime:checkOutTime];
-                
-                // Save current place to venue defaults as it's used in several places in the app
-                [CPUserDefaultsHandler setCurrentVenue:venue];
-                
-                // update this venue in the list of past venues
-                [self updatePastVenue:venue];
-            }
-            else {
-                // There was an error checking in; probably safe to ignore
-            }
-        } else {
-            // There was an error in the main call while checking in; probably safe to ignore
+            [Flurry logEvent:@"cancelAutoCheckInRequest" withParameters:json timed:YES];
         }
     }];
 }
 
-- (void)autoCheckOutForRegion:(CLRegion *)region
+- (void)autoCheckOutForVenue:(CPVenue *)venue
 {
-    [FlurryAnalytics logEvent:@"autoCheckedOut"];
+    [Flurry logEvent:@"autoCheckedOut"];
     
     [SVProgressHUD showWithStatus:@"Checking out..."];
     
@@ -120,8 +109,8 @@ static CPGeofenceHandler *sharedHandler;
             [[UIApplication sharedApplication] cancelAllLocalNotifications];
             
             NSDictionary *jsonDict = [json objectForKey:@"payload"];
-            NSString *venue = [jsonDict valueForKey:@"venue_name"];
-            NSMutableString *alertText = [NSMutableString stringWithFormat:@"Checked out of %@.", venue];
+            NSString *venueName = [jsonDict valueForKey:@"venue_name"];
+            NSMutableString *alertText = [NSMutableString stringWithFormat:@"Checked out of %@.", venueName];
             
             int hours = [[jsonDict valueForKey:@"hours_checked_in"] intValue];
             if (hours == 1) {
@@ -137,7 +126,7 @@ static CPGeofenceHandler *sharedHandler;
             
             localNotif.userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
                                    @"exit", @"geofence",
-                                   region.identifier, @"venue_name",
+                                   venue.name, @"venue_name",
                                    nil];
             
             [[UIApplication sharedApplication] presentLocalNotificationNow:localNotif];
@@ -158,6 +147,24 @@ static CPGeofenceHandler *sharedHandler;
 
 -(void)handleGeofenceNotification:(NSString *)message userInfo:(NSDictionary *)userInfo
 {
+    NSString *geofence = [userInfo objectForKey:@"geofence"];
+    if (![geofence isEqualToString:@"exit"]) {
+
+        NSNumber *venueID = @([userInfo[@"venue_id"] intValue]);
+        int checkoutTime = [[userInfo objectForKey:@"check_out_time"] intValue];
+        // Cancel all old local notifications
+        [[UIApplication sharedApplication] cancelAllLocalNotifications];
+
+        CPVenue *venue;
+        if ([[CPCheckinHandler sharedHandler].pendingAutoCheckInVenue.venueID isEqualToNumber:venueID]) {
+            venue = [CPCheckinHandler sharedHandler].pendingAutoCheckInVenue;
+        } else {
+            venue = [self venueWithID:venueID];
+        }
+
+        [CPCheckinHandler handleSuccessfulCheckinToVenue:venue checkoutTime:checkoutTime];
+    }
+
     // check if the app is currently active
     if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
         // alloc-init a CPAlertView
@@ -232,6 +239,22 @@ static CPGeofenceHandler *sharedHandler;
         }
     }
     
+    return venueMatch;
+}
+
+- (CPVenue *)venueWithID:(NSNumber *)venueID
+{
+    NSArray *pastVenues = [CPUserDefaultsHandler pastVenues];
+
+    CPVenue *venueMatch;
+
+    for (NSData *encodedObject in pastVenues) {
+        CPVenue *venue = (CPVenue *)[NSKeyedUnarchiver unarchiveObjectWithData:encodedObject];
+
+        if ([venue.venueID isEqualToNumber:venueID]) {
+            venueMatch = venue;
+        }
+    }
     return venueMatch;
 }
 

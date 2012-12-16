@@ -7,10 +7,9 @@
 //
 
 #import "AutoCheckinTableViewController.h"
-#import "CPVenue.h"
 #import "AutoCheckinCell.h"
-#import "FlurryAnalytics.h"
 #import "CPGeofenceHandler.h"
+#import "PushModalViewControllerFromLeftSegue.h"
 
 @interface AutoCheckinTableViewController ()
 @property (strong, nonatomic) NSMutableArray *placesArray;
@@ -121,7 +120,7 @@
             [[CPAppDelegate locationManager] stopMonitoringForRegion:reg];
         }
         
-        [FlurryAnalytics logEvent:@"automaticCheckinsDisabled"];
+        [Flurry logEvent:@"automaticCheckinsDisabled"];
     }
     else {
         [self setupPlacesArray];
@@ -134,10 +133,14 @@
             }
         }
 
-        [FlurryAnalytics logEvent:@"automaticCheckinsEnabled"];
+        [Flurry logEvent:@"automaticCheckinsEnabled"];
     }
     
     [self.tableView reloadData];
 }
 
+- (IBAction)gearPressed:(UIButton *)sender
+{
+    [self dismissPushModalViewControllerFromLeftSegue];
+}
 @end

@@ -16,9 +16,13 @@
 @property (weak, nonatomic) IBOutlet UILabel *nicknameLabel;
 @property (weak, nonatomic) IBOutlet UILabel *categoryLabel;
 @property (weak, nonatomic) IBOutlet UILabel *statusLabel;
-@property (weak, nonatomic) IBOutlet UILabel *distanceLabel;
 @property (weak, nonatomic) IBOutlet UILabel *checkInLabel;
 @property (weak, nonatomic) IBOutlet UILabel *checkInCountLabel;
 @property (weak, nonatomic) IBOutlet UIImageView *profilePictureImageView;
+@property (weak, nonatomic) IBOutlet UILabel *endorseCountLabel;
+@property (weak, nonatomic) IBOutlet UIView *endorseCountUnderlineView;
+@property (weak, nonatomic) IBOutlet UILabel *hoursWorkedLabel;
+@property (weak, nonatomic) IBOutlet UILabel *hoursWorkedUnitLabel;
+@property (weak, nonatomic) IBOutlet UIView *hoursWorkedUnderlineView;
 
 @end
