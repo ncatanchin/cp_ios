@@ -11,19 +11,17 @@
 
 @interface FaceToFaceAcceptDeclineViewController : UIViewController <UITextFieldDelegate>
 
-@property (strong, nonatomic) User *user;
+@property (strong, nonatomic) CPUser *user;
 @property (strong, nonatomic) UserProfileViewController *userProfile;
 @property (weak, nonatomic) IBOutlet UIView *actionBar;
 @property (weak, nonatomic) IBOutlet UILabel *actionBarHeader;
 @property (weak, nonatomic) IBOutlet UIButton *f2fAcceptButton;
 @property (weak, nonatomic) IBOutlet UIButton *f2fDeclineButton;
 @property (weak, nonatomic) IBOutlet UIView *viewUnderToolbar;
-@property (weak, nonatomic) IBOutlet UITextField *passwordField;
 @property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
 @property (weak, nonatomic) IBOutlet UINavigationBar *navigationBar;
 
-- (IBAction)acceptF2F;
-- (IBAction)declineF2F;
-- (void)cancelPasswordEntry:(id)sender;
+- (IBAction)acceptContactRequest;
+- (IBAction)declineContactRequest;
 
 @end

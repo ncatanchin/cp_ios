@@ -17,4 +17,6 @@
 @property (strong, nonatomic) NSMutableArray *contactRequests;
 @property (weak, nonatomic) IBOutlet UISearchBar *searchBar;
 
++ (void)getNumberOfContactRequestsAndUpdateBadge;
+
 @end

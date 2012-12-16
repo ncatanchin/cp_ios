@@ -7,8 +7,16 @@
 //
 
 #import "SignupController.h"
-#import "FlurryAnalytics.h"
+#import "Flurry.h"
 #import "UIViewController+isModal.h"
+
+@interface SignupController()
+
+@property (weak, nonatomic) IBOutlet UIImageView *backgroundImageView;
+@property (weak, nonatomic) IBOutlet UIButton *linkedinLoginButton;
+@property (weak, nonatomic) IBOutlet UIButton *dismissButton;
+
+@end
 
 @implementation SignupController
 
@@ -18,10 +26,7 @@
 {
     [super viewDidLoad];
     
-    // Do any additional setup after loading the view from its nib.
-    [CPUIHelper makeButtonCPButton:self.dismissButton
-                 withCPButtonColor:CPButtonGrey];
-    [FlurryAnalytics logEvent:@"signupScreen"];
+    [Flurry logEvent:@"signupScreen"];
     
     // if this is being presented inside the app from the UITabBarController
     // then don't show the later button
@@ -32,12 +37,16 @@
         // then bring them to the map once they login
         [CPAppDelegate settingsMenuController].afterLoginAction = CPAfterLoginActionShowMap;
     }
+    
+    if ([CPUtils isDeviceWithFourInchDisplay]) {
+        self.backgroundImageView.image = [UIImage imageNamed:@"Default-568h"];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationItem setHidesBackButton:YES animated:NO];
-    [self.navigationController setNavigationBarHidden:YES animated:NO];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
     self.title = @"Log In";
     // Set the back button that will appear in pushed views
     self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Back" 
@@ -46,17 +55,22 @@
                                                                             action:nil];
     // prepare for the icons to fade in
     self.linkedinLoginButton.alpha = 0.0;
+    self.dismissButton.alpha = 0.0;
 }
 
 - (void) viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    
     // fade in the icons to direct user attention at them
-    [UIView beginAnimations:@"" context:nil];
-    [UIView setAnimationDuration:0.3];
-    self.linkedinLoginButton.alpha = 1.0;
-    [UIView commitAnimations];
+    [UIView animateWithDuration:0.3 animations:^{
+        self.linkedinLoginButton.alpha = 1.0;
+        self.dismissButton.alpha = 1.0;
+    }];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    
     [self.navigationController setNavigationBarHidden:NO animated:animated];
 }
 
@@ -65,15 +79,15 @@
 	// Handle LinkedIn login
 	// The LinkedIn login object will handle the sequence that follows
     [self performSegueWithIdentifier:@"ShowLinkedInLoginController" sender:sender];
-    [FlurryAnalytics logEvent:@"startedLinkedInLogin"];
+    [Flurry logEvent:@"startedLinkedInLogin"];
 }
 
 - (IBAction) dismissClick:(id)sender
 {
     // make sure the selected index is 1 so it goes to the map
-    [CPAppDelegate tabBarController].selectedIndex = 1;
+    [CPAppDelegate tabBarController].selectedIndex = 0;
     [self dismissModalViewControllerAnimated:YES];
-    [FlurryAnalytics logEvent:@"skippedSignup"];
+    [Flurry logEvent:@"skippedSignup"];
 }
 
 @end

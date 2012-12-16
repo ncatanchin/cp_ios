@@ -11,7 +11,7 @@
 
 @interface JobCategoryViewController ()
 
-@property (strong, nonatomic) User *user;
+@property (strong, nonatomic) CPUser *user;
 @property (strong, nonatomic) NSArray *jobCategories;
 @property (weak, nonatomic) IBOutlet UIButton *majorCategoryButton;
 @property (weak, nonatomic) IBOutlet UIButton *minorCategoryButton;
@@ -58,11 +58,11 @@
 
 - (void)saveUserJobCategories
 {
-    if ([self.user majorJobCategory] != [[self.majorCategoryButton titleLabel] text] ||
-            [self.user minorJobCategory] != [[self.minorCategoryButton titleLabel] text]) {
+    if (![self.user.majorJobCategory isEqualToString:self.majorCategoryButton.titleLabel.text] ||
+            ![self.user.minorJobCategory isEqualToString:self.minorCategoryButton.titleLabel.text]) {
 
-        [self.user setMajorJobCategory:[[self.majorCategoryButton titleLabel] text]];
-        [self.user setMinorJobCategory:[[self.minorCategoryButton titleLabel] text]];
+        self.user.majorJobCategory = self.majorCategoryButton.titleLabel.text;
+        self.user.minorJobCategory = self.minorCategoryButton.titleLabel.text;
 
         [SVProgressHUD show];
 

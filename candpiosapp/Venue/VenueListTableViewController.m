@@ -10,7 +10,8 @@
 #import "VenueCell.h"
 #import "VenueInfoViewController.h"
 #import "MapTabController.h"
-#import "MapDataSet.h"
+#import "SVPullToRefresh.h"
+#import "CPMarkerManager.h"
 
 @implementation VenueListTableViewController
 
@@ -26,64 +27,33 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    
+    self.tableView.allowsSelection = YES;
     // our delegate is the map tab controller
     self.delegate = [[CPAppDelegate settingsMenuController] mapTabController];
     
-    // Add a notification catcher for refreshTableViewWithNewMapData to refresh the view
+    __block VenueListTableViewController *venueListVC = self;
     
-    [[NSNotificationCenter defaultCenter] addObserver:self 
-                                             selector:@selector(newDataBeingLoaded:) 
-                                                 name:@"mapIsLoadingNewData" 
-                                               object:nil]; 
+    [self.tableView addPullToRefreshWithActionHandler:^{
+        [self.delegate refreshLocations:^{
+            [venueListVC refreshFromNewMapData];
+        }];
+    }];
     
-    [[NSNotificationCenter defaultCenter] addObserver:self 
-                                             selector:@selector(refreshFromNewMapData:) 
-                                                 name:@"refreshVenuesFromNewMapData"
-                                               object:nil]; 
-}
-
-- (void)viewDidUnload
-{
-    [super viewDidUnload];
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    self.tableView.tableFooterView = [self tabBarButtonAvoidingFooterView];
 }
 
 - (void)viewDidAppear:(BOOL)animated
 {
     [super viewDidAppear:animated];
-    
-    // setup the tableView with whatever we already have
-    [self.tableView reloadData];
-    
-    // show the right loading spinner
-    [self showCorrectLoadingSpinnerForCount:self.venues.count];
-    
-    // tell the map to reload data
-    // we'll get a notification when that's done to reload ours
-    [self.delegate refreshButtonClicked:nil];   
+    [self refreshFromNewMapData];
 }
 
--(void)newDataBeingLoaded:(NSNotification *)notification
+- (void)refreshFromNewMapData
 {
-    // check if we're visible
-    if ([[[self tabBarController] selectedViewController] isEqual:self]) {
-        [self showCorrectLoadingSpinnerForCount:self.venues.count];
-    }
-}
-
-- (void)refreshFromNewMapData:(NSNotification *)notification {
-    
-    // get the venues from the notification
-    self.venues = [[(NSArray *)notification.object sortedArrayUsingComparator:^(id a, id b) {
-        NSNumber *first = [NSNumber numberWithDouble:[a distanceFromUser]];
-        NSNumber *second = [NSNumber numberWithDouble:[b distanceFromUser]];
-        
-        return [first compare:second];
-    }] mutableCopy];
-    
     CLLocation *currentLocation = [CPAppDelegate locationManager].location;
     
+    self.venues = [[CPMarkerManager sharedManager].venues mutableCopy];
+   
     // although distanceFromUser has already been set after the API call in the map
     // it's been set to distance from the center of the map, which isn't necessarily the user's location
     // so iterate through the venues now and make sure that the distances are correct
@@ -91,16 +61,18 @@
         CLLocation *location = [[CLLocation alloc] initWithLatitude:venue.coordinate.latitude longitude:venue.coordinate.longitude];
         venue.distanceFromUser = [location distanceFromLocation:currentLocation];
     }
-
-
-    if (self.isViewLoaded && self.view.window) {
-        // we're visible
-        // dismiss the SVProgressHUD and reload our data
-        [self stopAppropriateLoadingSpinner];
+    
+    // get the venues from the notification
+    self.venues = [[self.venues sortedArrayUsingComparator:^(id a, id b) {
+        NSNumber *first = [NSNumber numberWithDouble:[a distanceFromUser]];
+        NSNumber *second = [NSNumber numberWithDouble:[b distanceFromUser]];
         
-        [self.tableView reloadData];
-    }
-   
+        return [first compare:second];
+    }] mutableCopy];
+
+    // we're visible
+    [self.tableView.pullToRefreshView stopAnimating];
+    [self.tableView reloadData];   
 }
 
 #pragma mark - Table view data source
@@ -117,7 +89,7 @@
     
     VenueCell *vcell = [tableView dequeueReusableCellWithIdentifier:venueCellIdentifier];
     
-    if (vcell == nil) {
+    if (!vcell) {
         vcell = [[VenueCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:venueCellIdentifier];
     }
     
@@ -129,24 +101,16 @@
     vcell.venueDistance.text = [NSString stringWithFormat:@"%@ %@", [CPUtils localizedDistanceStringForDistance:venue.distanceFromUser], @"away"];
     
     vcell.venueCheckins.text = @"";
-    if (venue.checkinCount  > 0) {
-        if (venue.checkinCount == 1) {
+    if ([venue.checkedInNow intValue]  > 0) {
+        if ([venue.checkedInNow intValue] == 1) {
             vcell.venueCheckins.text = @"1 person here now";
         } else {
-            vcell.venueCheckins.text = [NSString stringWithFormat:@"%d people here now", venue.checkinCount];
+            vcell.venueCheckins.text = [NSString stringWithFormat:@"%@ people here now", venue.checkedInNow];
         }
     } else {
-        if (venue.weeklyCheckinCount > 0) {
-            
-            vcell.venueCheckins.text = [NSString stringWithFormat:venue.weeklyCheckinCount == 1 ? @"%d person this week" : @"%d people this week", venue.weeklyCheckinCount];
-        } else {
-            if (venue.intervalCheckinCount > 0) {
-                vcell.venueCheckins.text = [NSString stringWithFormat:venue.intervalCheckinCount == 1 ? @"%d person all time" : @"%d people all time", venue.intervalCheckinCount];
-            } else {
-                vcell.venueCheckins.text = @"";
-            }                
-        }
-        
+        vcell.venueCheckins.text = [NSString stringWithFormat:
+                                    [venue.weeklyCheckinCount intValue] == 1 ? @"%@ person this week" : @"%@ people this week",
+                                    venue.weeklyCheckinCount];
     }
     
     if (![venue.photoURL isKindOfClass:[NSNull class]]) {

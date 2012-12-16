@@ -11,6 +11,7 @@
 #import "CPLinkedInAPI.h"
 #import "LinkedInConnectionCell.h"
 #import "EditLinkedInInvitationMessageViewController.h"
+#import "PushModalViewControllerFromLeftSegue.h"
 
 @interface InviteLinkedInConnectionsTableViewController ()
 
@@ -40,14 +41,12 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
     [self loadLinkedInConnections];
 }
 
 - (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
     if ([segue.identifier isEqualToString:@"EditLinkedInInvitationMessageViewControllerSegue"]) {
-        UINavigationController *navigationController = segue.destinationViewController;
-        EditLinkedInInvitationMessageViewController *editInvitationViewController = (EditLinkedInInvitationMessageViewController *)navigationController.topViewController;
+        EditLinkedInInvitationMessageViewController *editInvitationViewController = (EditLinkedInInvitationMessageViewController *)segue.destinationViewController;
         
         editInvitationViewController.nickname = [CPUserDefaultsHandler currentUser].nickname;
         editInvitationViewController.connectionIDs = [self arrayOfSlectedConnectionIDs];
@@ -56,7 +55,6 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    
     [self resetNextButtonEnabledState];
 }
 
@@ -196,4 +194,8 @@
     self.navigationItem.rightBarButtonItem.enabled = enabled;
 }
 
+- (IBAction)gearPressed:(UIButton *)sender
+{
+    [self dismissPushModalViewControllerFromLeftSegue];
+}
 @end

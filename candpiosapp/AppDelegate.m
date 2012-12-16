@@ -7,25 +7,29 @@
 //
 
 #import "FaceToFaceHelper.h"
-#import "ChatHelper.h"
+#import "CPChatHelper.h"
 #import "OAuthConsumer.h"
-#import "EnterInvitationCodeViewController.h"
-#import "CheckInDetailsViewController.h"
 #import "CPAlertView.h"
 #import "VenueInfoViewController.h"
-#import "PushModalViewControllerFromLeftSegue.h"
-#import "CPApiClient.h"
 #import "CPCheckinHandler.h"
 #import "CPGeofenceHandler.h"
 #import "CPUserSessionHandler.h"
+#import "UserProfileViewController.h"
 
 #define kContactRequestAPNSKey @"contact_request"
 #define kContactRequestAcceptedAPNSKey @"contact_accepted"
-#define kCheckOutLocalNotificationAlertViewTitle @"You will be checked out of C&P in 5 min."
+#define kContactEndorsedAPNSKey @"contact_endorsed"
 
 #define kCheckOutAlertTag 602
+#define kFeedViewAlertTag 500
+#define kContactEndorsedTag 501
 
-@interface AppDelegate()
+#define kDefaultLatitude 37.77493
+#define kDefaultLongitude -122.419415
+
+@interface AppDelegate() {
+    NSCache *_cache;
+}
 
 @property (nonatomic, strong) NSDictionary* urbanAirshipTakeOffOptions;
 
@@ -45,20 +49,9 @@
 
 - (BOOL)application:(UIApplication *)application
 didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
-{
-    // Override point for customization after application launch.
-    NSSetUncaughtExceptionHandler(&uncaughtExceptionHandler);
-
-    // create the signal action structure 
-    struct sigaction newSignalAction;
-    // initialize the signal action structure
-    memset(&newSignalAction, 0, sizeof(newSignalAction));
-    // set SignalHandler as the handler in the signal action structure
-    newSignalAction.sa_handler = &SignalHandler;
-    // set SignalHandler as the handlers for SIGABRT, SIGILL and SIGBUS
-    sigaction(SIGABRT, &newSignalAction, NULL);
-    sigaction(SIGILL, &newSignalAction, NULL);
-    sigaction(SIGBUS, &newSignalAction, NULL);
+{    
+    // temporarily handle decoding of old User object
+    [NSKeyedUnarchiver setClass:[CPUser class] forClassName:@"User"];
     
     [self setupTestFlightSDK];
     [self setupFlurryAnalytics];
@@ -112,6 +105,8 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 
 - (void)applicationDidEnterBackground:(UIApplication *)application
 {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"applicationDidEnterBackground" object:nil];
+    
     if (_locationManager) {
         // in order to make sure we don't have stray significant change monitoring
         // from previous app versions
@@ -125,6 +120,7 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 
 - (void)applicationWillEnterForeground:(UIApplication *)application
 {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"applicationWillEnterForeground" object:nil];
 	/*
 	 Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
 	 */
@@ -133,8 +129,6 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"applicationDidBecomeActive" object:nil];
-
 	/*
 	 Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
 	 */
@@ -161,9 +155,8 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 
     NSString *urlString = [NSString stringWithFormat:@"%@", url];
     
-    NSRange textRangeLinkedIn, textRangeSmarterer;
+    NSRange textRangeLinkedIn;
     textRangeLinkedIn = [urlString rangeOfString:@"candp://linkedin"];
-    textRangeSmarterer = [urlString rangeOfString:@"candp://smarterer"];
     
     if (textRangeLinkedIn.location != NSNotFound)
     {
@@ -172,16 +165,6 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
                               nil];
         
         [[NSNotificationCenter defaultCenter] postNotificationName:@"linkedInCredentials" object:self userInfo:dict];
-        
-        succeeded = YES;
-    }
-    else if (textRangeSmarterer.location != NSNotFound)
-    {
-        NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
-                              urlString, @"url",
-                              nil];
-        NSLog(@"smarterer url: %@", urlString);
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"smartererCredentials" object:self userInfo:dict];
         
         succeeded = YES;
     }
@@ -235,32 +218,19 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 
 # pragma mark - Push Notifications
 
-- (void)pushAliasUpdate {
-    // Set my UserID as an UrbanAirship alias for push notifications
-    NSString *userid = [NSString stringWithFormat:@"%d", [CPUserDefaultsHandler currentUser].userID];
-    
-    NSLog(@"Pushing aliases to UrbanAirship: %@", userid);
-    [[UAPush shared] updateAlias:userid];
-    
-    // make sure that the signup modal has been dismissed if its still around
-    [CPUserSessionHandler dismissSignupModalFromPresentingViewController];
-}
-
 - (void)application:(UIApplication *)app
 didReceiveLocalNotification:(UILocalNotification *)notif
 {    
-    NSString *alertText;
     NSString *cancelText;
     NSString *otherText;
 
     if ([notif.alertAction isEqualToString:@"Check Out"]) {
         // For regular timeout checkouts
-        alertText = kCheckOutLocalNotificationAlertViewTitle;
         cancelText = @"Ignore";
         otherText = @"View";
         CPAlertView *alertView;
 
-        alertView = [[CPAlertView alloc] initWithTitle:alertText
+        alertView = [[CPAlertView alloc] initWithTitle:notif.alertBody
                                                message:nil
                                               delegate:self
                                      cancelButtonTitle:cancelText
@@ -296,18 +266,36 @@ didReceiveRemoteNotification:(NSDictionary*)userInfo
         NSString *message = [chatParts componentsJoinedByString:@": "];
         NSInteger userId = [[userInfo valueForKey:@"chat"] intValue];
         
-        [ChatHelper respondToIncomingChatNotification:message
+        [CPChatHelper respondToIncomingChatNotification:message
                                          fromNickname:nickname
-                                           fromUserId:userId
-                                         withRootView:self.tabBarController];
+                                           fromUserId:userId];
+    } else if ([userInfo valueForKey:@"feed_venue_id"]) {
+
+        CPAlertView *alertView = [[CPAlertView alloc] initWithTitle:@"Incoming message"
+                                                            message:alertMessage
+                                                           delegate:self
+                                                  cancelButtonTitle:@"Ignore"
+                                                  otherButtonTitles:@"View", nil];
+        alertView.tag = kFeedViewAlertTag;
+        alertView.context = userInfo;
+        [alertView show];
+
     } else if ([userInfo valueForKey:@"geofence"]) {
         [[CPGeofenceHandler sharedHandler] handleGeofenceNotification:alertMessage userInfo:userInfo];
-    } else if ([userInfo valueForKey:kContactRequestAPNSKey] != nil) {        
-        [FaceToFaceHelper presentF2FInviteFromUser:[[userInfo valueForKey:kContactRequestAPNSKey] intValue]
-                                          fromView:self.settingsMenuController];
-    } else if ([userInfo valueForKey:kContactRequestAcceptedAPNSKey] != nil) {
-        [FaceToFaceHelper presentF2FSuccessFrom:[userInfo valueForKey:@"acceptor"]
-                                       fromView:self.settingsMenuController];
+    } else if ([userInfo valueForKey:kContactEndorsedAPNSKey]) {
+        CPAlertView *alertView = [[CPAlertView alloc] initWithTitle:@"Contact Endorsed"
+                                                            message:alertMessage
+                                                           delegate:self
+                                                  cancelButtonTitle:@"Ignore"
+                                                  otherButtonTitles:@"View", nil];
+        alertView.tag = kContactEndorsedTag;
+        alertView.context = userInfo;
+        [alertView show];
+        
+    } else if ([userInfo valueForKey:kContactRequestAPNSKey]) {        
+        [FaceToFaceHelper presentF2FInviteFromUserID:@([[userInfo valueForKey:kContactRequestAPNSKey] intValue])];
+    } else if ([userInfo valueForKey:kContactRequestAcceptedAPNSKey]) {
+        [FaceToFaceHelper presentF2FSuccessFrom:[userInfo valueForKey:@"acceptor"]];
     } else {
         // just show the alert if there was one, and the app is active
         if (alertMessage && [UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
@@ -345,11 +333,38 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
 
 #pragma mark - Third Party SDKs
 
+- (void)setupUrbanAirship
+{
+    if (self.urbanAirshipTakeOffOptions) {
+        // Create Airship singleton that's used to talk to Urban Airship servers.
+        // Please populate AirshipConfig.plist with your info from http://go.urbanairship.com
+        [UAirship takeOff:self.urbanAirshipTakeOffOptions];
+        
+        // register for push
+        [[UAPush shared] registerForRemoteNotificationTypes:
+         (UIRemoteNotificationTypeBadge | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeAlert)];
+        
+        // nil out the urban airship take off options
+        self.urbanAirshipTakeOffOptions = nil;
+    }
+}
+
+- (void)pushAliasUpdate {
+    // Set my UserID as an UrbanAirship alias for push notifications
+    NSString *userIDString = [[CPUserDefaultsHandler currentUser].userID stringValue];
+    
+    NSLog(@"Attempting to register user alias %@ with UrbanAirship", userIDString);
+    [UAPush shared].alias = userIDString;
+    [[UAPush shared] updateRegistration];
+}
+
 - (void)setupTestFlightSDK
 {
     // if this is a build for TestFlight then set the user's UDID so sessions in testflight are associated with them
 #define TESTING 1
 #ifdef TESTING
+    
+    [TestFlight setOptions:[NSDictionary dictionaryWithObject:[NSNumber numberWithBool:YES] forKey:@"disableInAppUpdates"]];
     
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -361,27 +376,9 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
     [TestFlight takeOff:kTestFlightKey];
 }
 
-- (void)setupUrbanAirship
-{
-    if (self.urbanAirshipTakeOffOptions) {
-        // Create Airship singleton that's used to talk to Urban Airship servers.
-        // Please populate AirshipConfig.plist with your info from http://go.urbanairship.com
-        [UAirship takeOff:self.urbanAirshipTakeOffOptions];
-        
-        _urbanAirshipClient = [AFHTTPClient clientWithBaseURL:[NSURL URLWithString:@"https://go.urbanairship.com/api"]];
-        
-        // register for push
-        [[UAPush shared] registerForRemoteNotificationTypes:
-         (UIRemoteNotificationTypeBadge | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeAlert)];
-        
-        // nil out the urban airship take off options
-        self.urbanAirshipTakeOffOptions = nil;
-    }
-}
-
 -(void)setupFlurryAnalytics
 {
-    [FlurryAnalytics startSession:flurryAnalyticsKey];
+    [Flurry startSession:flurryAnalyticsKey];
     
     // See what notifications the user has set and push to Flurry
     UIRemoteNotificationType types = [[UIApplication sharedApplication] enabledRemoteNotificationTypes];
@@ -404,7 +401,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
         }
     }
     [flurryParams setValue:alertValue forKey:@"Notifications"];
-    [FlurryAnalytics logEvent:@"enabled_notifications" withParameters:flurryParams];
+    [Flurry logEvent:@"enabled_notifications" withParameters:flurryParams];
     NSLog(@"Notification types: %@", flurryParams);
 }
 
@@ -420,6 +417,16 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
         [_locationManager startUpdatingLocation];
     }
     return _locationManager;
+}
+
+- (CLLocation *)currentOrDefaultLocation
+{
+    CLLocation *userLocation = [CPAppDelegate locationManager].location;
+    if (!userLocation) {
+        userLocation = [[CLLocation alloc] initWithLatitude:kDefaultLatitude longitude:kDefaultLongitude];
+    }
+
+    return userLocation;
 }
 
 - (void)locationManager:(CLLocationManager *)manager didEnterRegion:(CLRegion *)region {
@@ -444,11 +451,10 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
     }
 }
 
-- (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region {    
-    if ([CPUserDefaultsHandler isUserCurrentlyCheckedIn] && [[CPUserDefaultsHandler currentVenue].name isEqualToString:region.identifier]) {
-        // Log user out immediately
-        [[CPGeofenceHandler sharedHandler] autoCheckOutForRegion:region];
-    }
+- (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region {
+    // grab the right venue from our past venues
+    CPVenue * autoVenue = [[CPGeofenceHandler sharedHandler] venueWithName:region.identifier];
+    [[CPGeofenceHandler sharedHandler] handleAutoCheckOutForVenue:autoVenue];
 }
 
 - (void)locationManager:(CLLocationManager *)manager monitoringDidFailForRegion:(CLRegion *)region withError:(NSError *)error
@@ -473,7 +479,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
     [[UIBarButtonItem appearance] setTitleTextAttributes:[NSDictionary dictionaryWithObject:[UIFont fontWithName:@"LeagueGothic" size:16]
                                                                                      forKey:UITextAttributeFont]
                                                 forState:UIControlStateNormal];
-    [[UIBarButtonItem appearance] setBackButtonTitlePositionAdjustment:UIOffsetMake(1, -1)
+    [[UIBarButtonItem appearance] setBackButtonTitlePositionAdjustment:UIOffsetMake(1, ([CPUtils systemVersionGreaterThanOrEqualTo:6.0] ? 1 : -2))
                                                          forBarMetrics:UIBarMetricsDefault];
     [[UIBarButtonItem appearance] setTitlePositionAdjustment:UIOffsetMake(0, 0)
                                                forBarMetrics:UIBarMetricsDefault];
@@ -548,20 +554,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
 
         
         UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:venueVC];
-        [self.tabBarController presentModalViewController:navigationController animated:YES];        
-        
-        // If you want to instead take the user directly to the check-in screen, use the code below
-        
-        //    CheckInDetailsViewController *vc = [[UIStoryboard storyboardWithName:@"CheckinStoryboard_iPhone" bundle:nil]
-        //                                        instantiateViewControllerWithIdentifier:@"CheckinDetailsViewController"];
-        //    [vc setPlace:venue];
-        //    vc.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Cancel"
-        //                                                                           style:UIBarButtonItemStylePlain
-        //                                                                          target:vc
-        //                                                                          action:@selector(dismissViewControllerAnimated)];
-        //    
-        //    UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:vc];
-        //    [self.tabBarController presentModalViewController:navigationController animated:YES];
+        [self.tabBarController presentModalViewController:navigationController animated:YES];
     }
     else {
         // Venue wasn't found, so load the normal checkIn screen so the user can select it
@@ -572,15 +565,13 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)err
     }
 }
 
-#pragma mark - Crash Handlers
-
-void uncaughtExceptionHandler(NSException *exception) {
-    [FlurryAnalytics logError:@"Uncaught" message:@"Crash!" exception:exception];
-}
-
-void SignalHandler(int sig) {
-    // NSLog(@"This is where we save the application data during a signal");
-    // Save application data on crash
+#pragma mark - appCache
+- (NSCache *)appCache
+{
+    if (!_cache) {
+        _cache = [[NSCache alloc] init];
+    }
+    return _cache;
 }
 
 #pragma mark - UIAlertViewDelegate
@@ -590,30 +581,29 @@ void SignalHandler(int sig) {
     CPAlertView *cpAlertView = (CPAlertView *)alertView;
     NSDictionary *userInfo = cpAlertView.context;
 
-    if ([alertView.title isEqualToString:kCheckOutLocalNotificationAlertViewTitle]) {
+    if (alertView.tag == kCheckOutAlertTag) {
         if (alertView.firstOtherButtonIndex == buttonIndex) {            
             [CPCheckinHandler sharedHandler].checkOutTimer = [NSTimer scheduledTimerWithTimeInterval:300
-                                                                                    target:self
+                                                                                    target:[CPCheckinHandler sharedHandler]
                                                                                   selector:@selector(setCheckedOut) 
                                                                                   userInfo:nil 
                                                                                    repeats:NO];
             
             
             CPVenue *venue = (CPVenue *)[NSKeyedUnarchiver unarchiveObjectWithData:[userInfo objectForKey:@"venue"]];
-            
-            CheckInDetailsViewController *vc = [[UIStoryboard storyboardWithName:@"CheckinStoryboard_iPhone" bundle:nil]
-                                                instantiateViewControllerWithIdentifier:@"CheckinDetailsViewController"];
-            vc.checkInIsVirtual = false;
-            [vc setVenue:venue];
-            vc.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Cancel"
-                                                                                   style:UIBarButtonItemStylePlain
-                                                                                  target:vc
-                                                                                  action:@selector(dismissViewControllerAnimated)];
-            
-            UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:vc];
-            [self.tabBarController presentModalViewController:navigationController animated:YES];
+            [CPCheckinHandler presentCheckInDetailsModalForVenue:venue presentingViewController:self.tabBarController];
         }
+    } else if (alertView.tag == kContactEndorsedTag && alertView.firstOtherButtonIndex == buttonIndex) {
+
+        CPUser *user = [[CPUser alloc] init];
+        user.userID = @([[userInfo objectForKey:kContactEndorsedAPNSKey] intValue]);
         
+        UserProfileViewController *vc = [[UIStoryboard storyboardWithName:@"UserProfileStoryboard_iPhone"
+                                                                   bundle:nil] instantiateInitialViewController];
+        vc.scrollToReviews = YES;
+        vc.user = user;
+        [[self.tabBarController.viewControllers objectAtIndex:self.tabBarController.selectedIndex] pushViewController:vc
+                                                                                                             animated:YES];
     }
 }
 

@@ -8,6 +8,7 @@
 
 #import "CPUserDefaultsHandler.h"
 #import "ContactListViewController.h"
+#import "CPTabBarController.h"
 
 // define a way to quickly grab and set NSUserDefaults
 #define DEFAULTS(type, key) ([[NSUserDefaults standardUserDefaults] type##ForKey:key])
@@ -20,12 +21,13 @@
 
 NSString* const kUDCurrentUser = @"loggedUser";
 
-+ (void)setCurrentUser:(User *)currentUser
++ (void)setCurrentUser:(CPUser *)currentUser
 {
 #if DEBUG
-    NSLog(@"Storing user data for user with ID %d and nickname %@ to NSUserDefaults", currentUser.userID, currentUser.nickname);
+    NSLog(@"Storing user data for user with ID %@ and nickname %@ to NSUserDefaults", currentUser.userID, currentUser.nickname);
 #endif
-    
+
+    [[CPAppDelegate appCache] removeObjectForKey:kUDCurrentUser];
     // encode the user object
     NSData *encodedUser = [NSKeyedArchiver archivedDataWithRootObject:currentUser];
     
@@ -33,26 +35,43 @@ NSString* const kUDCurrentUser = @"loggedUser";
     SET_DEFAULTS(Object, kUDCurrentUser, encodedUser);
     
     [[NSNotificationCenter defaultCenter] postNotificationName:@"LoginStateChanged" object:nil];
-    
-    if (currentUser.numberOfContactRequests) {
-        [[NSNotificationCenter defaultCenter] postNotificationName:kNumberOfContactRequestsNotification
-                                                            object:self
-                                                          userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
-                                                                    currentUser.numberOfContactRequests, @"numberOfContactRequests",
-                                                                    nil]];
-    }
 }
 
-+ (User *)currentUser
++ (CPUser *)currentUser
 {
     if (DEFAULTS(object, kUDCurrentUser)) {
-        // grab the coded user from NSUserDefaults
-        NSData *myEncodedObject = DEFAULTS(object, kUDCurrentUser);
+        CPUser *user = [[CPAppDelegate appCache] objectForKey:kUDCurrentUser];
+
+        if (!user) {
+            // grab the coded user from NSUserDefaults
+            NSData *myEncodedObject = DEFAULTS(object, kUDCurrentUser);
+            user = (CPUser *)[NSKeyedUnarchiver unarchiveObjectWithData:myEncodedObject];
+            if (!user) {
+                return nil;
+            }
+            [[CPAppDelegate appCache] setObject:user forKey:kUDCurrentUser];
+        }
         // return it
-        return (User *)[NSKeyedUnarchiver unarchiveObjectWithData:myEncodedObject];
+        return user;
     } else {
         return nil;
     }
+}
+
+NSString* const kUDNumberOfContactRequests = @"numberOfContactRequests";
++ (void)setNumberOfContactRequests:(NSInteger)numberOfContactRequests
+{
+    SET_DEFAULTS(Integer, kUDNumberOfContactRequests, numberOfContactRequests);
+    
+    // update the badge on the contacts tab number
+    CPThinTabBar *thinTabBar = (CPThinTabBar *)[[CPAppDelegate  tabBarController] tabBar];
+    [thinTabBar setBadgeNumber:[NSNumber numberWithInteger:numberOfContactRequests]
+                    atTabIndex:(kNumberOfTabsRightOfButton - 1)];
+}
+
++ (NSInteger)numberOfContactRequests
+{
+    return DEFAULTS(integer, kUDNumberOfContactRequests);
 }
 
 NSString* const kUDCurrentVenue = @"currentCheckIn";
@@ -131,58 +150,6 @@ NSString* const kAutomaticCheckins = @"automaticCheckins";
 + (BOOL)automaticCheckins
 {
     return [DEFAULTS(object, kAutomaticCheckins) boolValue];
-}
-
-NSString* const kUDFeedVenues = @"feedVenues";
-
-+ (void)addFeedVenue:(CPVenue *)venue
-{
-    // setup an NSString object with the venue ID
-    NSString *venueIDString = [NSString stringWithFormat:@"%d", venue.venueID];
-    
-    // encode the venue object
-    NSData *encodedVenue = [NSKeyedArchiver archivedDataWithRootObject:venue];
-    
-    // grab the array of logVenues
-    NSMutableDictionary *mutableFeedVenues = [[self feedVenues] mutableCopy];
-    
-    // make sure we don't already have a venue for with this ID
-    if (![mutableFeedVenues objectForKey:venueIDString]) {
-        // add the NSData representation of this venue at the venue ID string key
-        [mutableFeedVenues setObject:encodedVenue forKey:venueIDString];
-    }
-    
-    SET_DEFAULTS(Object, kUDFeedVenues, [NSDictionary dictionaryWithDictionary:mutableFeedVenues]);
-    
-    // send a notification so the feed view controller reloads its feeds
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"feedVenueAdded" object:self];
-}
-+ (BOOL)hasFeedVenues
-{
-    return (DEFAULTS(object, kUDFeedVenues) != nil);
-}
-
-+ (NSDictionary *)feedVenues
-{
-    // pull the array of logVenues from NSUserDefaults
-    // create one if it does not exist
-    NSDictionary *feedVenues;
-    if (!(feedVenues = DEFAULTS(object, kUDFeedVenues))) {
-        // the user has not selected any venues yet.. set them up with reasonable defaults
-        feedVenues = [NSDictionary dictionary];
-    }
-    
-    return feedVenues;
-}
-
-+ (void)removeFeedVenueWithID:(NSUInteger)venueID
-{
-    NSString *venueIDString = [NSString stringWithFormat:@"%d", venueID];
-    NSMutableDictionary *mutableFeedVenues = [[self feedVenues] mutableCopy];
-    
-    [mutableFeedVenues removeObjectForKey:venueIDString];
-    
-    SET_DEFAULTS(Object, kUDFeedVenues, [NSDictionary dictionaryWithDictionary:mutableFeedVenues]);
 }
 
 @end

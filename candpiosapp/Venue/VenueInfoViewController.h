@@ -6,22 +6,22 @@
 //  Copyright (c) 2012 Coffee and Power Inc. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
 #import "CPVenue.h"
+#import "CPUserActionCell.h"
 
-@interface VenueInfoViewController : UIViewController
+@interface VenueInfoViewController : UIViewController <UITableViewDataSource, UITableViewDelegate, CPUserActionCellDelegate>
+
++ (VenueInfoViewController *)onScreenVenueVC;
 
 @property (strong, nonatomic) CPVenue *venue;
 @property (weak, nonatomic) IBOutlet UIImageView *venuePhoto;
-@property (weak, nonatomic) IBOutlet UIView *firstAidSection;
-@property (weak, nonatomic) IBOutlet UIView *userSection;
 @property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
+@property (weak, nonatomic) IBOutlet UITableView *tableView;
+@property (weak, nonatomic) IBOutlet UIImageView *venueBarSeparator;
 @property (strong, nonatomic) NSMutableDictionary *categoryCount;
 @property (strong, nonatomic) NSMutableDictionary *currentUsers;
-@property (strong, nonatomic) NSMutableArray *previousUsers;
-@property (strong, nonatomic) NSMutableSet *usersShown;
-@property (strong, nonatomic) NSMutableDictionary *userObjectsForUsersOnScreen;
 @property (nonatomic) BOOL scrollToUserThumbnail;
-
+@property (strong, nonatomic) NSArray *orderedPreviousUsers;
+@property (strong, nonatomic) NSArray *orderedCategories;
 
 @end

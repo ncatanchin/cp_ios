@@ -14,13 +14,14 @@
 
 typedef enum {
     CPAfterLoginActionNone,
-    CPAfterLoginActionShowLogbook,
-    CPAfterLoginActionAddNewLog,
-    CPAfterLoginActionPostQuestion,
     CPAfterLoginActionShowMap
 } CPAfterLoginAction;
 
-@interface SettingsMenuController : UIViewController <UITableViewDelegate, UITableViewDataSource, UIAlertViewDelegate>
+@interface SettingsMenuController : UIViewController <UITableViewDelegate,
+                                                      UITableViewDataSource,
+                                                      UIAlertViewDelegate,
+                                                      UINavigationControllerDelegate,
+                                                      UIImagePickerControllerDelegate>
 
 @property (strong, nonatomic) CPTabBarController *cpTabBarController;
 @property (strong, nonatomic) MapTabController *mapTabController;
@@ -34,13 +35,14 @@ typedef enum {
 
 // the following properties are used to dismiss F2F alerts that don't need to still be showing once new ones come in
 @property (strong, nonatomic) UIAlertView *f2fInviteAlert;
-@property (strong, nonatomic) UIAlertView *f2fPasswordAlert;
-
 
 - (IBAction)loginButtonClick:(id)sender;
 - (IBAction)blockUIButtonClick:(id)sender;
+- (IBAction)showTermsOfServiceModal:(id)sender;
 
 - (void)showMenu:(BOOL)shouldReveal;
 - (void)closeMenu;
+
+- (void)showProfilePicturePickerModalForSource:(UIImagePickerControllerSourceType)imagePickerSource;
 
 @end

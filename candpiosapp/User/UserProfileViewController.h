@@ -6,16 +6,15 @@
 //  Copyright (c) 2012 Coffee and Power Inc. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
 #import <MapKit/MapKit.h>
-#define kRequestToAddToMyContactsActionSheetTitle @"Request to exchange contact info?"
+#import "CPUserActionCell.h"
 
-@interface UserProfileViewController : UIViewController
+@interface UserProfileViewController : UIViewController <UIScrollViewDelegate, CPUserActionCellDelegate>
 
-@property (strong, nonatomic) User *user;
+@property (strong, nonatomic) CPUser *user;
 @property (nonatomic) BOOL isF2FInvite;
+@property (nonatomic) BOOL scrollToReviews;
 
-- (IBAction)f2fInvite;
 - (void)placeUserDataOnProfile;
 
 @end
